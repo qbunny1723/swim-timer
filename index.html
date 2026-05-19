@@ -761,9 +761,32 @@
 
     function splitCommands(text) {
       const normalized = normalizeText(text).replace(/請整理|整理/g, ",");
-      const rough = normalized.split(",").filter(Boolean);
       const commands = [];
       const tokens = nameTokens();
+      const rawParts = normalized.split(",").filter(Boolean);
+      const nameOnlyToken = (part) => tokens.find((item) => part === item.token || part.endsWith(item.token));
+      const startsWithTimeOrAction = (part) => /^([0-9一二三四五六七八九十:：分秒]|出發|回來|到達|抵達|回到)/.test(part);
+      const rough = [];
+      let pendingName = null;
+      for (const part of rawParts) {
+        const nameToken = nameOnlyToken(part);
+        if (nameToken && !startsWithTimeOrAction(part)) {
+          if (pendingName) rough.push(pendingName.raw);
+          pendingName = { raw: part, token: nameToken };
+          continue;
+        }
+        if (pendingName && startsWithTimeOrAction(part)) {
+          rough.push(`${pendingName.token.token}${part}`);
+          pendingName = null;
+          continue;
+        }
+        if (pendingName) {
+          rough.push(pendingName.raw);
+          pendingName = null;
+        }
+        rough.push(part);
+      }
+      if (pendingName) rough.push(pendingName.raw);
       for (const part of rough) {
         const matches = [];
         const usedSpans = [];
