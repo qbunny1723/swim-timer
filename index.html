@@ -405,6 +405,10 @@
         <div class="body">
           <label for="correctionBox">每行一組：聽錯=正確</label>
           <textarea id="correctionBox" style="min-height:150px;"></textarea>
+          <div class="button-row">
+            <button class="saveSettingsControl">儲存到 Google Drive</button>
+            <button class="downloadSettingsControl secondary">下載設定備份</button>
+          </div>
           <p class="small">例：語音常把「林昱辰」聽成「林泳辰」，就填 `泳辰=昱辰`。整理時會先自動替換。</p>
         </div>
       </section>
@@ -429,6 +433,10 @@
 阿乖=盧昱妡
 阿飛=陳奕飛
 玥棠=方玥棠</textarea>
+          <div class="button-row">
+            <button class="saveSettingsControl">儲存到 Google Drive</button>
+            <button class="downloadSettingsControl secondary">下載設定備份</button>
+          </div>
           <p class="small">可以喊小名，例如「芮婕005出發」。結果會自動記到「方芮婕」。不要只填單一個字，兩個字以上會比較穩。</p>
         </div>
       </section>
@@ -494,6 +502,7 @@
     const state = { entries: [], issues: [] };
     let recognition = null;
     let listening = false;
+    let autoSaveTimer = null;
 
     const el = (id) => document.getElementById(id);
 
@@ -510,6 +519,27 @@
         aliases: el("aliasBox")?.value || "",
         savedAt: new Date().toISOString(),
       };
+    }
+
+    function savedAtValue(data) {
+      const time = Date.parse(data?.savedAt || "");
+      return Number.isFinite(time) ? time : 0;
+    }
+
+    function saveSettingsLocal(showStatus = false) {
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsPayload()));
+        if (showStatus) setStatus("已先暫存在這台手機/瀏覽器，按「儲存到 Google Drive」可同步到雲端。", "good");
+        return true;
+      } catch {
+        if (showStatus) setStatus("暫存失敗：這個瀏覽器可能封鎖本機儲存。", "bad");
+        return false;
+      }
+    }
+
+    function queueSettingsAutosave() {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(() => saveSettingsLocal(false), 350);
     }
 
     async function sheetGet(key) {
@@ -554,26 +584,32 @@
     }
 
     async function loadSettings() {
-      let loaded = false;
+      let remoteData = null;
+      let localData = null;
       try {
         const remote = await sheetGet(SETTINGS_KEY);
-        if (remote) {
-          loaded = applySettings(JSON.parse(remote));
-          if (loaded) localStorage.setItem(SETTINGS_KEY, remote);
-        }
+        if (remote) remoteData = JSON.parse(remote);
       } catch {}
-
-      if (loaded) {
-        setStatus("已從 Google Drive 載入設定。", "good");
-        return;
-      }
 
       try {
         const raw = localStorage.getItem(SETTINGS_KEY);
-        if (!raw) return;
-        const data = JSON.parse(raw);
-        if (applySettings(data)) setStatus("已從這台手機/瀏覽器載入設定。", "good");
+        if (raw) localData = JSON.parse(raw);
       } catch {}
+
+      if (localData && savedAtValue(localData) > savedAtValue(remoteData)) {
+        if (applySettings(localData)) setStatus("已載入這台手機較新的暫存設定。按「儲存到 Google Drive」可同步到雲端。", "good");
+        return;
+      }
+
+      if (remoteData) {
+        if (applySettings(remoteData)) {
+          try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(remoteData)); } catch {}
+          setStatus("已從 Google Drive 載入設定。", "good");
+        }
+        return;
+      }
+
+      if (localData && applySettings(localData)) setStatus("已從這台手機/瀏覽器載入設定。", "good");
     }
 
     function downloadSettings() {
@@ -1038,6 +1074,12 @@
     el("clearTextBtn").addEventListener("click", () => { el("commandBox").value = ""; setStatus("已清空文字。"); });
     el("saveSettingsBtn").addEventListener("click", saveSettings);
     el("downloadSettingsBtn").addEventListener("click", downloadSettings);
+    document.querySelectorAll(".saveSettingsControl").forEach((button) => button.addEventListener("click", saveSettings));
+    document.querySelectorAll(".downloadSettingsControl").forEach((button) => button.addEventListener("click", downloadSettings));
+    ["rosterBox", "correctionBox", "aliasBox"].forEach((id) => {
+      el(id).addEventListener("input", queueSettingsAutosave);
+      el(id).addEventListener("change", () => saveSettingsLocal(false));
+    });
 
     el("closeDetailBtn").addEventListener("click", () => {
       el("detailDialog").classList.remove("show");
