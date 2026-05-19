@@ -488,6 +488,8 @@
   </div>
 
   <script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbymdpISVFTDHc989_-cfS1uyf4IG9gkejiw47j1mwwwUjf-118nfeGMlgLdSw32ytzerg/exec";
+    const SETTINGS_KEY = "swimTimerSettings";
     const maxTrips = 6;
     const state = { entries: [], issues: [] };
     let recognition = null;
@@ -510,23 +512,67 @@
       };
     }
 
-    function saveSettings() {
+    async function sheetGet(key) {
       try {
-        localStorage.setItem("swimTimerSettings", JSON.stringify(settingsPayload()));
-        setStatus("設定已儲存在這台手機/瀏覽器。要備份到 Google Drive，請按「下載設定備份」後存到雲端硬碟。", "good");
+        const res = await fetch(`${API_URL}?key=${encodeURIComponent(key)}`);
+        const data = await res.json();
+        return data.value || null;
       } catch {
-        setStatus("儲存失敗：這個瀏覽器可能封鎖本機儲存。", "bad");
+        return null;
       }
     }
 
-    function loadSettings() {
+    async function sheetSet(key, value) {
+      await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({ key, value }),
+      });
+    }
+
+    function applySettings(data) {
+      if (!data || typeof data !== "object") return false;
+      if (typeof data.roster === "string") el("rosterBox").value = data.roster;
+      if (typeof data.corrections === "string") el("correctionBox").value = data.corrections;
+      if (typeof data.aliases === "string") el("aliasBox").value = data.aliases;
+      return true;
+    }
+
+    async function saveSettings() {
+      const payload = settingsPayload();
       try {
-        const raw = localStorage.getItem("swimTimerSettings");
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload));
+      } catch {}
+
+      setStatus("正在儲存到 Google Drive...", "good");
+      try {
+        await sheetSet(SETTINGS_KEY, JSON.stringify(payload));
+        setStatus("設定已儲存到 Google Drive，也同步留在這台手機/瀏覽器。", "good");
+      } catch {
+        setStatus("Google Drive 儲存失敗，但已盡量保存在這台手機/瀏覽器。", "bad");
+      }
+    }
+
+    async function loadSettings() {
+      let loaded = false;
+      try {
+        const remote = await sheetGet(SETTINGS_KEY);
+        if (remote) {
+          loaded = applySettings(JSON.parse(remote));
+          if (loaded) localStorage.setItem(SETTINGS_KEY, remote);
+        }
+      } catch {}
+
+      if (loaded) {
+        setStatus("已從 Google Drive 載入設定。", "good");
+        return;
+      }
+
+      try {
+        const raw = localStorage.getItem(SETTINGS_KEY);
         if (!raw) return;
         const data = JSON.parse(raw);
-        if (typeof data.roster === "string") el("rosterBox").value = data.roster;
-        if (typeof data.corrections === "string") el("correctionBox").value = data.corrections;
-        if (typeof data.aliases === "string") el("aliasBox").value = data.aliases;
+        if (applySettings(data)) setStatus("已從這台手機/瀏覽器載入設定。", "good");
       } catch {}
     }
 
@@ -537,7 +583,7 @@
       a.download = `游泳口令設定_${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(a.href);
-      setStatus("已下載設定備份。手機上可用分享/儲存到 Google Drive。", "good");
+      setStatus("已下載設定備份。", "good");
     }
 
     function corrections() {
@@ -1098,8 +1144,8 @@
       return rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
     }
 
-    loadSettings();
     render();
+    loadSettings();
   </script>
 </body>
 </html>
