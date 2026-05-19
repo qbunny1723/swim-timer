@@ -897,32 +897,6 @@
       });
     }
 
-    function tripRankMaps(rows) {
-      return Array.from({ length: maxTrips }, (_, tripIndex) => {
-        const results = rows
-          .map(({ name, trips }) => {
-            const trip = trips[tripIndex];
-            if (!trip.back) return null;
-          if (!trip.start && !(trip.back.deductSeconds || 0)) return null;
-          const seconds = trip.start
-              ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0)
-              : trip.back.time.total - (trip.back.deductSeconds || 0);
-            return seconds >= 0 ? { name, seconds } : null;
-          })
-          .filter(Boolean)
-          .sort((a, b) => a.seconds - b.seconds);
-        const map = new Map();
-        let rank = 0;
-        let previous = null;
-        results.forEach((item, index) => {
-          if (item.seconds !== previous) rank = index + 1;
-          previous = item.seconds;
-          map.set(item.name, rank);
-        });
-        return map;
-      });
-    }
-
     function swimmerMetrics(trips) {
       const completed = trips
         .map((trip, index) => {
@@ -947,6 +921,22 @@
       };
     }
 
+    function personalRankMap(results) {
+      const ranked = results
+        .map((seconds, index) => seconds !== null && seconds >= 0 ? { index, seconds } : null)
+        .filter(Boolean)
+        .sort((a, b) => a.seconds - b.seconds);
+      const map = new Map();
+      let rank = 0;
+      let previous = null;
+      ranked.forEach((item, index) => {
+        if (item.seconds !== previous) rank = index + 1;
+        previous = item.seconds;
+        map.set(item.index, rank);
+      });
+      return map;
+    }
+
     function fmt(total) {
       if (total === null || total === undefined || total === "") return "";
       const sign = total < 0 ? "-" : "";
@@ -956,7 +946,6 @@
 
     function render() {
       const rows = grouped();
-      const rankMaps = tripRankMaps(rows);
       el("summaryTable").innerHTML = `
         <thead>
           <tr>
@@ -971,6 +960,7 @@
               ? (!trip.start && !(trip.back.deductSeconds || 0) ? null : (trip.start ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0) : trip.back.time.total - (trip.back.deductSeconds || 0)))
               : null);
             const valid = results.filter((v) => v !== null && v >= 0);
+            const personalRanks = personalRankMap(results);
             const metrics = swimmerMetrics(trips);
             const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "";
             return `<tr>
@@ -978,7 +968,7 @@
               ${trips.map((trip, i) => {
                 const result = results[i];
                 const bad = result !== null && result < 0;
-                const rank = result !== null && result >= 0 ? rankMaps[i].get(name) : "";
+                const rank = result !== null && result >= 0 ? personalRanks.get(i) : "";
                 const resultLabel = bad ? "回來早於出發" : fmt(result);
                 const detailArgs = [
                   name,
