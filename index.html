@@ -1,4 +1,382 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>游泳口令整理器</title><style>body{margin:0;font-family:"Microsoft JhengHei",system-ui,sans-serif;color:#17343b;background:#eef6f6}header{background:#176b75;color:white;padding:14px}h1{margin:0;font-size:24px}.wrap{display:grid;grid-template-columns:420px 1fr;gap:12px;padding:12px}section{background:white;border:1px solid #d7e4e7;border-radius:8px;overflow:hidden;margin-bottom:12px}.title{font-weight:800;background:#f7fbfb;border-bottom:1px solid #d7e4e7;padding:10px}.body{padding:10px}textarea,input,select,button{font:inherit}textarea,input,select{width:100%;box-sizing:border-box;border:1px solid #d7e4e7;border-radius:7px;padding:9px}textarea{min-height:180px;line-height:1.6}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}button{border:0;border-radius:7px;padding:10px;font-weight:800;background:#176b75;color:white}.secondary{background:#e6eef0;color:#17343b}.danger{background:#ad3028}.warn{background:#f2c94c;color:#382900}.status{margin-top:8px;padding:9px;border-radius:7px;background:#eef6f6;color:#647780}.ok{background:#e8f6ef;color:#137a4f}.bad{background:#fff0ee;color:#b42318}.table{overflow:auto;max-height:72vh}table{width:100%;border-collapse:collapse;background:white}th,td{border-bottom:1px solid #d7e4e7;padding:8px;white-space:nowrap;text-align:left}th{position:sticky;top:0;background:#dff0f1}.res{font-weight:900;color:#176b75}.rank{display:inline-block;background:#f2c94c;color:#3b2a00;border-radius:999px;padding:1px 6px;margin-left:4px}.link{background:transparent;color:#176b75;text-decoration:underline;padding:0}.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:18px}.modal-bg.show{display:flex}.modal{background:white;border-radius:8px;width:min(420px,100%);overflow:hidden}.modal h2{margin:0;background:#176b75;color:white;padding:12px}.modal .line{display:flex;justify-content:space-between;border-bottom:1px solid #d7e4e7;padding:9px 0}.modal strong{color:#176b75;font-size:18px}@media(max-width:900px){.wrap{display:block;padding:8px}section{border-left:0;border-right:0;border-radius:0}textarea{min-height:32vh;font-size:17px}.row{position:sticky;bottom:0;background:white;padding-top:8px}button{min-height:45px}th,td{font-size:14px}}</style></head><body><header><h1>游泳口令整理器</h1><div>語音已恢復，出發/回來正確配對</div></header><div class="wrap"><div><section><div class="title">口令文字</div><div class="body"><textarea id="cmd" placeholder="例：盧昱妡000出發盧冠羽005出發趙祤絜010出發，盧昱妡235回來盧冠羽125回來趙祤絜145回來"></textarea><div class="row"><button id="listen">開始語音</button><button id="stop" class="secondary" disabled>停止語音</button><button id="parse" class="warn">整理</button><button id="clear" class="secondary">清空文字</button><button id="demo">放入範例</button><button id="reset" class="danger">清空結果</button><button id="copy" class="secondary">複製表格</button><button id="csv" class="secondary">匯出 CSV</button></div><div id="status" class="status">可輸入：000出發、235回來、150扣5秒。也可以按開始語音。</div></div></section><section><div class="title">常用學生名單</div><div class="body"><textarea id="roster">林育丞
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>游泳口令整理器</title>
+  <style>
+    :root {
+      --bg: #eef6f6;
+      --panel: #ffffff;
+      --ink: #17343b;
+      --muted: #647780;
+      --line: #d7e4e7;
+      --accent: #176b75;
+      --accent-soft: #dff0f1;
+      --warn: #f2c94c;
+      --bad: #b42318;
+      --good: #137a4f;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    header {
+      padding: 18px 20px;
+      background: var(--accent);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+
+    header div:last-child {
+      font-size: 14px;
+      opacity: .9;
+    }
+
+    main {
+      padding: 16px;
+      display: grid;
+      grid-template-columns: minmax(320px, 430px) 1fr;
+      gap: 16px;
+    }
+
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .section-title {
+      padding: 12px 14px;
+      background: #f7fbfb;
+      border-bottom: 1px solid var(--line);
+      font-weight: 700;
+    }
+
+    .body { padding: 14px; }
+
+    textarea, input, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 10px 11px;
+      font: inherit;
+      background: #fff;
+      color: var(--ink);
+    }
+
+    textarea {
+      min-height: 250px;
+      line-height: 1.65;
+      resize: vertical;
+    }
+
+    label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .small {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.55;
+      margin: 8px 0 0;
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 7px;
+      padding: 11px 12px;
+      font: inherit;
+      font-weight: 700;
+      color: #fff;
+      background: var(--accent);
+      cursor: pointer;
+    }
+
+    button.secondary {
+      color: var(--ink);
+      background: #e6eef0;
+    }
+
+    button.warning {
+      color: #352700;
+      background: var(--warn);
+    }
+
+    button.danger {
+      color: #fff;
+      background: var(--bad);
+    }
+
+    button:disabled {
+      opacity: .55;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-top: 10px;
+      border-radius: 7px;
+      padding: 10px 11px;
+      background: #eef6f6;
+      color: var(--muted);
+      line-height: 1.5;
+      min-height: 42px;
+    }
+
+    .status.good { color: var(--good); background: #e8f6ef; }
+    .status.bad { color: var(--bad); background: #fff0ee; }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: 1.1fr .75fr .75fr .9fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: calc(100vh - 118px);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 8px 7px;
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+      text-align: left;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--accent-soft);
+      color: #12343b;
+      font-weight: 700;
+    }
+
+    td.result {
+      font-weight: 800;
+      color: var(--accent);
+    }
+
+    .issue {
+      color: var(--bad);
+      font-weight: 700;
+    }
+
+    .rank {
+      display: inline-block;
+      margin-left: 5px;
+      border-radius: 999px;
+      padding: 1px 6px;
+      font-size: 12px;
+      font-weight: 800;
+      color: #3b2a00;
+      background: var(--warn);
+      vertical-align: 1px;
+    }
+
+    .metric-good {
+      color: var(--good);
+      font-weight: 800;
+    }
+
+    .metric-muted {
+      color: var(--muted);
+    }
+
+    .raw-table {
+      max-height: 260px;
+    }
+
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-weight: 700;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .result-btn {
+      border: 0;
+      background: transparent;
+      color: var(--accent);
+      font: inherit;
+      font-weight: 900;
+      padding: 0;
+      min-height: 0;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    .dialog-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(12, 25, 31, .45);
+    }
+
+    .dialog-backdrop.show { display: flex; }
+
+    .dialog {
+      width: min(420px, 100%);
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .25);
+      overflow: hidden;
+    }
+
+    .dialog h2 {
+      margin: 0;
+      padding: 13px 15px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 18px;
+    }
+
+    .dialog-content {
+      padding: 15px;
+      line-height: 1.8;
+    }
+
+    .dialog-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      padding: 8px 0;
+    }
+
+    .dialog-row strong {
+      font-size: 18px;
+      color: var(--accent);
+    }
+
+    .examples {
+      background: #fbf7e6;
+      border: 1px solid #eadc9b;
+      border-radius: 7px;
+      padding: 10px 11px;
+      line-height: 1.65;
+      font-size: 13px;
+      color: #4b3a08;
+      margin-top: 10px;
+    }
+
+    @media (max-width: 980px) {
+      body { background: #fff; }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        padding: 12px 14px;
+      }
+      h1 { font-size: 20px; }
+      header div:last-child { font-size: 12px; }
+      main {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        padding: 10px;
+      }
+      section {
+        border-radius: 0;
+        border-left: 0;
+        border-right: 0;
+      }
+      .body { padding: 12px; }
+      textarea {
+        min-height: 38dvh;
+        font-size: 17px;
+      }
+      .button-row {
+        position: sticky;
+        bottom: 0;
+        z-index: 4;
+        background: rgba(255, 255, 255, .96);
+        padding: 8px 0 0;
+      }
+      button { min-height: 46px; }
+      .table-wrap { max-height: 70dvh; }
+      th, td {
+        padding: 9px 8px;
+        font-size: 13px;
+      }
+      .grid-4 { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>游泳口令整理器</h1>
+    <div>支援 000、005、110、205，多趟自動配對</div>
+  </header>
+
+  <main>
+    <div>
+      <section>
+        <div class="section-title">一直說，最後整理</div>
+        <div class="body">
+          <label for="commandBox">口令文字</label>
+          <textarea id="commandBox" placeholder="例：林立誠000出發，方瑞傑005出發，盧冠宇010出發，林立誠110回來，盧冠宇200回來，方瑞傑130回來，請整理"></textarea>
+          <div class="button-row">
+            <button id="listenBtn">開始語音</button>
+            <button id="stopBtn" class="secondary" disabled>停止</button>
+            <button id="parseBtn" class="warning">整理</button>
+            <button id="clearTextBtn" class="secondary">清空文字</button>
+            <button id="fullscreenBtn">全螢幕</button>
+            <button id="focusInputBtn" class="secondary">繼續輸入</button>
+          </div>
+          <div id="status" class="status">可以用手機/電腦鍵盤的語音輸入一直講，最後按整理。Chrome/Edge 可試用「開始語音」。</div>
+          <div class="examples">
+            建議口令：林立誠000出發、方瑞傑005出發、林立誠110回來。<br>
+            時間碼規則：000 = 0:00，005 = 0:05，110 = 1:10，1230 = 12:30。
+          </div>
+        </div>
+      </section>
+
+      <section style="margin-top:16px;">
+        <div class="section-title">常用學生名單</div>
+        <div class="body">
+          <label for="rosterBox">每行一位學生，可自行新增</label>
+          <textarea id="rosterBox" style="min-height:190px;">林育丞
 方芮婕
 盧冠羽
 黃敬芫
@@ -13,7 +391,16 @@
 陳曉寬
 盧昱妡
 陳奕飛
-方玥棠</textarea></div></section><section><div class="title">姓名校正</div><div class="body"><textarea id="corr">育成=育丞
+方玥棠</textarea>
+          <p class="small">整理時會優先從這份名單抓姓名。臨時學生直接加在最後一行即可。</p>
+        </div>
+      </section>
+
+      <section style="margin-top:16px;">
+        <div class="section-title">學生名單校正</div>
+        <div class="body">
+          <label for="correctionBox">每行一組：聽錯=正確</label>
+          <textarea id="correctionBox" style="min-height:150px;">育成=育丞
 育承=育丞
 玉成=育丞
 育辰=育丞
@@ -31,6 +418,638 @@
 祐潔=祤絜
 祐絜=祤絜
 劭綸=劭倫
+曉寬=曉寬
 昱欣=昱妡
 奕霏=奕飛
-月棠=玥棠</textarea></div></section></div><div><section><div class="title">整理表</div><div class="table"><table id="summary"></table></div></section><section><div class="title">原始紀錄與提醒</div><div class="table" style="max-height:300px"><table id="raw"></table></div></section></div></div><div id="mbg" class="modal-bg"><div class="modal"><h2 id="mt">趟次明細</h2><div class="body" id="mc"></div><div class="body"><button class="secondary" style="width:100%" id="mclose">關閉</button></div></div></div><script>const maxTrips=6,state={entries:[],issues:[]};let rec=null,listening=false;const $=id=>document.getElementById(id);function setStatus(t,c=''){let s=$('status');s.textContent=t;s.className='status '+c}function corr(){return $('corr').value.split(/\n+/).map(x=>x.trim()).filter(x=>x.includes('=')).map(x=>{let[a,b]=x.split('=').map(y=>y.trim());return a&&b?{a,b}:null}).filter(Boolean)}function applyCorr(t){for(const o of corr())t=t.replaceAll(o.a,o.b);return t}function roster(){return $('roster').value.split(/\n+/).map(x=>x.trim()).filter(Boolean).sort((a,b)=>b.length-a.length)}function norm(t){return applyCorr(t).replace(/[，、。；;｜|]/g,',').replace(/\s+/g,'').replace(/兩/g,'二').replace(/[零〇]/g,'0')}function cn(s){if(s==null||s==='')return 0;s=String(s).replace(/[零〇]/g,'');if(/^\d+$/.test(s))return +s;const d={一:1,二:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9};if(s==='十')return 10;if(s.includes('十')){let[a,b]=s.split('十');return(a?d[a]:1)*10+(b?d[b]:0)}return d[s]??null}function nd(s){return String(s).replace(/一/g,'1').replace(/二/g,'2').replace(/三/g,'3').replace(/四/g,'4').replace(/五/g,'5').replace(/六/g,'6').replace(/七/g,'7').replace(/八/g,'8').replace(/九/g,'9')}function deduct(raw){let m=String(raw||'').match(/扣([0-9一二三四五六七八九十兩]+)秒?/);return m?(cn(m[1].replace(/兩/g,'二'))||0):0}function time(raw){if(!raw)return null;let t=String(raw).replace(/\s+/g,'').replace(/兩/g,'二').replace(/扣.*$/,'');let m=t.match(/^(\d+)[:：](\d{1,2})$/);if(m)return tobj(+m[1],+m[2]);m=t.match(/^([0-9一二三四五六七八九十]+)分([0-9一二三四五六七八九十]+)秒?$/);if(m)return tobj(cn(m[1]),cn(m[2]));m=t.match(/^([0-9一二三四五六七八九十]+)分$/);if(m)return tobj(cn(m[1]),0);m=t.match(/^([0-9一二三四五六七八九十]+)秒$/);if(m)return tobj(0,cn(m[1]));let n=nd(t);if(/^\d{1,4}$/.test(n)){let p=n.padStart(3,'0');return tobj(+p.slice(0,-2),+p.slice(-2))}return null}function tobj(m,s){if(!Number.isFinite(m)||!Number.isFinite(s)||s<0||s>59)return null;return{total:m*60+s,label:`${m}:${String(s).padStart(2,'0')}`}}function action(a){return a==='出發'?'出發':'回來'}function split(text){const ns=roster(),out=[];for(const part of norm(text).replace(/請整理|整理/g,',').split(',').filter(Boolean)){const matches=[],ams=[...part.matchAll(/([0-9一二三四五六七八九十:：分秒]+(?:扣[0-9一二三四五六七八九十兩]+秒?)?)(出發|回來|到達|抵達|回到)?/g)];for(const am of ams){if(!am[2]&&!am[1].includes('扣'))continue;const before=part.slice(0,am.index),name=ns.find(n=>before.endsWith(n));if(name)matches.push([`${name}${am[0]}`,name,am[1],am[2]||'回來'])}if(!matches.length)matches.push(...part.matchAll(/([\u4e00-\u9fff]{2,4})([0-9一二三四五六七八九十:：分秒]+(?:扣[0-9一二三四五六七八九十兩]+秒?)?)(出發|回來|到達|抵達|回到)?/g));if(matches.length){for(const m of matches){const fb=String(m[2]).includes('扣')?'回來':'';out.push({raw:m[0],name:m[1],timeRaw:m[2],action:action(m[3]||fb)})}}else out.push({raw:part,error:'無法拆成「姓名 + 時間 + 出發/回來」'})}return out}function parse(){state.entries=[];state.issues=[];for(const c of split($('cmd').value)){if(c.error){state.issues.push(c);continue}const tm=time(c.timeRaw);if(!tm){state.issues.push({raw:c.raw,error:'時間無法判讀：'+c.timeRaw});continue}state.entries.push({id:Date.now()+Math.random(),name:c.name,action:c.action,time:tm,deduct:deduct(c.timeRaw),raw:c.raw})}render();setStatus(`已整理 ${state.entries.length} 筆紀錄${state.issues.length?'，有 '+state.issues.length+' 筆需確認':''}`,state.issues.length?'bad':'ok')}function idx(e){return state.entries.filter(x=>x.name===e.name&&x.action===e.action).findIndex(x=>x.id===e.id)+1}function groups(){return[...new Set(state.entries.map(e=>e.name))].map(name=>{let trips=Array.from({length:maxTrips},()=>({start:null,back:null}));for(const e of state.entries.filter(x=>x.name===name)){let i=idx(e)-1;if(i>=0&&i<maxTrips)trips[i][e.action==='出發'?'start':'back']=e}return{name,trips}})}function sec(t){if(!t.back)return null;if(!t.start&&!t.back.deduct)return null;return t.start?t.back.time.total-t.start.time.total-t.back.deduct:t.back.time.total-t.back.deduct}function fmt(v){if(v==null||v==='')return'';let sign=v<0?'-':'';v=Math.abs(v);return sign+Math.floor(v/60)+':'+String(v%60).padStart(2,'0')}function ranks(rows){return Array.from({length:maxTrips},(_,i)=>{let arr=rows.map(r=>{let s=sec(r.trips[i]);return s!=null&&s>=0?{name:r.name,s}:null}).filter(Boolean).sort((a,b)=>a.s-b.s),mp=new Map(),rank=0,prev=null;arr.forEach((x,j)=>{if(x.s!==prev)rank=j+1;prev=x.s;mp.set(x.name,rank)});return mp})}function metrics(trips){let done=trips.map((t,i)=>{let s=sec(t);return s!=null&&s>=0?{i,s}:null}).filter(Boolean);if(!done.length)return{pb:'',latest:'',imp:'',bt:''};let pb=done.reduce((b,x)=>x.s<b.s?x:b,done[0]);return{pb:pb.s,latest:done.at(-1).s,imp:done[0].s-done.at(-1).s,bt:'第'+(pb.i+1)+'趟'}}function esc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}function detail(name,i,st,bk,res,rank){$('mt').textContent=name+' 第'+i+'趟';$('mc').innerHTML=`<div class=line><span>出發時間</span><strong>${esc(st||'未記錄')}</strong></div><div class=line><span>回來時間</span><strong>${esc(bk||'未記錄')}</strong></div><div class=line><span>本趟成績</span><strong>${esc(res||'未完成')}</strong></div><div class=line><span>本趟排名</span><strong>${esc(rank||'-')}</strong></div>`;$('mbg').classList.add('show')}function render(){const rows=groups(),rs=ranks(rows);$('summary').innerHTML='<thead><tr><th>姓名</th>'+Array.from({length:maxTrips},(_,i)=>`<th>第${i+1}趟成績</th>`).join('')+'<th>完成</th><th>PB</th><th>PB趟次</th><th>最新</th><th>進步</th><th>平均</th></tr></thead><tbody>'+(rows.length?rows.map(r=>{let vals=r.trips.map(sec),valid=vals.filter(v=>v!=null&&v>=0),m=metrics(r.trips),avg=valid.length?Math.round(valid.reduce((a,b)=>a+b,0)/valid.length):'';return'<tr><td><b>'+esc(r.name)+'</b></td>'+r.trips.map((t,i)=>{let v=vals[i],bad=v!=null&&v<0,rank=v!=null&&v>=0?rs[i].get(r.name):'',lab=bad?'回來早於出發':fmt(v),bk=t.back?`${t.back.time.label}${t.back.deduct?' 扣'+t.back.deduct+'秒':''}`:'',args=[r.name,i+1,t.start?t.start.time.label:'',bk,lab,rank?'#'+rank:''].map(JSON.stringify).join(',');return`<td class="${bad?'issue':'res'}">${lab?`<button class=link onclick='detail(${args})'>${lab}${rank?'<span class=rank>#'+rank+'</span>':''}</button>`:''}</td>`}).join('')+`<td>${valid.length}</td><td class=res>${fmt(m.pb)}</td><td>${m.bt}</td><td>${fmt(m.latest)}</td><td>${m.imp===''?'':(m.imp>0?'+':'')+m.imp+'秒'}</td><td>${fmt(avg)}</td></tr>`}).join(''):'<tr><td colspan=13>尚未整理</td></tr>')+'</tbody>';$('raw').innerHTML='<thead><tr><th>#</th><th>姓名</th><th>動作</th><th>時間</th><th>第幾次</th><th>原始文字</th></tr></thead><tbody>'+(state.entries.map((e,i)=>`<tr><td>${i+1}</td><td>${esc(e.name)}</td><td><span class=pill>${e.action}</span></td><td>${e.time.label}${e.deduct?' 扣'+e.deduct+'秒':''}</td><td>${idx(e)}</td><td>${esc(e.raw)}</td></tr>`).join('')+state.issues.map(x=>`<tr><td>?</td><td colspan=4 class=issue>${esc(x.error)}</td><td>${esc(x.raw)}</td></tr>`).join('')||'<tr><td colspan=6>尚無紀錄</td></tr>')+'</tbody>'}function csv(){let headers=['姓名'];for(let i=1;i<=maxTrips;i++)headers.push(`第${i}趟出發`,`第${i}趟回來`,`第${i}趟成績`);headers.push('完成趟數','PB','PB趟次','最新','進步秒數','平均');let rows=[headers];for(const r of groups()){let vals=r.trips.map(sec),valid=vals.filter(v=>v!=null&&v>=0),m=metrics(r.trips),row=[r.name];r.trips.forEach((t,i)=>row.push(t.start?.time.label||'',t.back?`${t.back.time.label}${t.back.deduct?' 扣'+t.back.deduct+'秒':''}`:'',fmt(vals[i])));row.push(valid.length,fmt(m.pb),m.bt,fmt(m.latest),m.imp,fmt(valid.length?Math.round(valid.reduce((a,b)=>a+b,0)/valid.length):''));rows.push(row)}return rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n')}function setupSpeech(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return null;const r=new SR();r.lang='zh-TW';r.continuous=true;r.interimResults=false;r.onresult=e=>{let added='';for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)added+=e.results[i][0].transcript+'，';if(added){$('cmd').value+=added;if(/請整理|整理/.test(added))parse();else setStatus('已加入語音文字：'+added,'ok')}};r.onerror=e=>setStatus('語音錯誤：'+e.error+'。可改用鍵盤語音輸入文字框。','bad');r.onend=()=>{if(listening)try{r.start()}catch{}};return r}$('listen').onclick=()=>{rec||=setupSpeech();if(!rec){setStatus('這個瀏覽器不支援內建語音辨識，請用鍵盤語音輸入。','bad');return}listening=true;try{rec.start()}catch{}$('listen').disabled=true;$('stop').disabled=false;setStatus('正在聽。可以一直講，最後說請整理或按整理。','ok')};$('stop').onclick=()=>{listening=false;try{rec&&rec.stop()}catch{}$('listen').disabled=false;$('stop').disabled=true;setStatus('已停止語音')};$('parse').onclick=parse;$('clear').onclick=()=>{$('cmd').value=''};$('reset').onclick=()=>{state.entries=[];state.issues=[];render()};$('demo').onclick=()=>{$('cmd').value='盧昱妡000出發盧冠羽005出發趙祤絜010出發，盧昱妡235回來盧冠羽125回來趙祤絜145回來';parse()};$('copy').onclick=async()=>{await navigator.clipboard.writeText(csv());setStatus('已複製','ok')};$('csv').onclick=()=>{let b=new Blob(['\uFEFF'+csv()],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='游泳整理.csv';a.click()};$('mclose').onclick=()=>$('mbg').classList.remove('show');$('mbg').onclick=e=>{if(e.target===$('mbg'))$('mbg').classList.remove('show')};render();</script></body></html>
+月棠=玥棠</textarea>
+          <p class="small">例：語音常把「林昱辰」聽成「林泳辰」，就填 `泳辰=昱辰`。整理時會先自動替換。</p>
+        </div>
+      </section>
+
+      <section style="margin-top:16px;">
+        <div class="section-title">小名／叫法對照</div>
+        <div class="body">
+          <label for="aliasBox">每行一組：小名=正式姓名</label>
+          <textarea id="aliasBox" style="min-height:120px;">小丞=林育丞
+芮婕=方芮婕
+冠羽=盧冠羽
+敬芫=黃敬芫
+信毅=朱信毅
+柏豪=黃柏豪
+畇嬨=朱畇嬨
+敬倫=黃敬倫
+唯恩=陳唯恩
+祤絜=趙祤絜
+劭倫=魏劭倫
+彤恩=魏彤恩
+曉寬=陳曉寬
+昱妡=盧昱妡
+奕飛=陳奕飛
+玥棠=方玥棠</textarea>
+          <p class="small">可以喊小名，例如「芮婕005出發」。結果會自動記到「方芮婕」。不要只填單一個字，兩個字以上會比較穩。</p>
+        </div>
+      </section>
+
+      <section style="margin-top:16px;">
+        <div class="section-title">手動補一筆</div>
+        <div class="body">
+          <div class="grid-4">
+            <input id="manualName" placeholder="姓名">
+            <input id="manualTime" placeholder="時間碼">
+            <select id="manualAction">
+              <option>出發</option>
+              <option>回來</option>
+            </select>
+            <button id="manualAddBtn">加入</button>
+          </div>
+          <p class="small">手動補記也可以填 005、110、1:10、1分10秒。</p>
+        </div>
+      </section>
+
+      <section style="margin-top:16px;">
+        <div class="section-title">資料操作</div>
+        <div class="body">
+          <div class="button-row">
+            <button id="exportBtn">匯出 CSV</button>
+            <button id="copyBtn" class="secondary">複製表格</button>
+            <button id="resetBtn" class="danger">清空結果</button>
+            <button id="demoBtn" class="secondary">放入範例</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section>
+      <div class="section-title">整理表</div>
+      <div class="table-wrap">
+        <table id="summaryTable"></table>
+      </div>
+    </section>
+
+    <section style="grid-column:1 / -1;">
+      <div class="section-title">原始紀錄與提醒</div>
+      <div class="table-wrap raw-table">
+        <table id="rawTable"></table>
+      </div>
+    </section>
+  </main>
+
+  <div class="dialog-backdrop" id="detailDialog">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+      <h2 id="detailTitle">趟次明細</h2>
+      <div class="dialog-content" id="detailContent"></div>
+      <div class="body">
+        <button id="closeDetailBtn" class="secondary" style="width:100%;">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const maxTrips = 6;
+    const state = { entries: [], issues: [] };
+    let recognition = null;
+    let listening = false;
+
+    const el = (id) => document.getElementById(id);
+
+    function setStatus(message, type = "") {
+      const box = el("status");
+      box.textContent = message;
+      box.className = `status ${type}`.trim();
+    }
+
+    function corrections() {
+      const source = el("correctionBox")?.value || "";
+      return source
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter((line) => line && line.includes("="))
+        .map((line) => {
+          const [wrong, right] = line.split("=").map((part) => part.trim()).filter(Boolean);
+          return wrong && right ? { wrong, right } : null;
+        })
+        .filter(Boolean);
+    }
+
+    function applyCorrections(text) {
+      let output = text;
+      for (const { wrong, right } of corrections()) {
+        output = output.replaceAll(wrong, right);
+      }
+      return output;
+    }
+
+    function rosterNames() {
+      return (el("rosterBox")?.value || "")
+        .split(/\n+/)
+        .map((name) => name.trim())
+        .filter(Boolean)
+        .sort((a, b) => b.length - a.length);
+    }
+
+    function aliasEntries() {
+      const source = el("aliasBox")?.value || "";
+      return source
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter((line) => line && line.includes("="))
+        .map((line) => {
+          const [alias, name] = line.split("=").map((part) => part.trim()).filter(Boolean);
+          return alias && name ? { alias, name } : null;
+        })
+        .filter(Boolean);
+    }
+
+    function nameTokens() {
+      const tokens = rosterNames().map((name) => ({ token: name, name }));
+      for (const { alias, name } of aliasEntries()) {
+        if (alias.length >= 2) tokens.push({ token: alias, name });
+      }
+      return tokens.sort((a, b) => b.token.length - a.token.length);
+    }
+
+    function canonicalName(rawName) {
+      const alias = aliasEntries().find((item) => item.alias === rawName);
+      return alias ? alias.name : rawName;
+    }
+
+    function normalizeText(text) {
+      return applyCorrections(text)
+        .replace(/[，、。；;｜|]/g, ",")
+        .replace(/\s+/g, "")
+        .replace(/兩/g, "二")
+        .replace(/零/g, "0")
+        .replace(/〇/g, "0");
+    }
+
+    function chineseNumberToInt(raw) {
+      if (raw === undefined || raw === null || raw === "") return 0;
+      const s = String(raw).replace(/零|〇/g, "");
+      if (/^\d+$/.test(s)) return Number(s);
+      const digit = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+      if (s === "十") return 10;
+      if (s.includes("十")) {
+        const [tensRaw, onesRaw] = s.split("十");
+        const tens = tensRaw ? digit[tensRaw] : 1;
+        const ones = onesRaw ? digit[onesRaw] : 0;
+        return tens * 10 + ones;
+      }
+      return digit[s] ?? null;
+    }
+
+    function normalizeDigits(raw) {
+      return String(raw)
+        .replace(/一/g, "1")
+        .replace(/二/g, "2")
+        .replace(/三/g, "3")
+        .replace(/四/g, "4")
+        .replace(/五/g, "5")
+        .replace(/六/g, "6")
+        .replace(/七/g, "7")
+        .replace(/八/g, "8")
+        .replace(/九/g, "9");
+    }
+
+    function parseTime(raw) {
+      if (!raw) return null;
+      let text = String(raw).trim().replace(/\s+/g, "").replace(/兩/g, "二");
+      text = text.replace(/扣.*$/, "");
+      text = text.replace(/分0?([0-9])秒$/, "分$1秒");
+
+      const colon = text.match(/^(\d+)[:：](\d{1,2})$/);
+      if (colon) return timeObj(Number(colon[1]), Number(colon[2]));
+
+      const minSec = text.match(/^([0-9一二三四五六七八九十]+)分([0-9一二三四五六七八九十]+)秒?$/);
+      if (minSec) return timeObj(chineseNumberToInt(minSec[1]), chineseNumberToInt(minSec[2]));
+
+      const minOnly = text.match(/^([0-9一二三四五六七八九十]+)分$/);
+      if (minOnly) return timeObj(chineseNumberToInt(minOnly[1]), 0);
+
+      const secOnly = text.match(/^([0-9一二三四五六七八九十]+)秒$/);
+      if (secOnly) return timeObj(0, chineseNumberToInt(secOnly[1]));
+
+      const numericText = normalizeDigits(text);
+      if (/^\d{1,4}$/.test(numericText)) {
+        const padded = numericText.padStart(3, "0");
+        const minute = Number(padded.slice(0, -2));
+        const second = Number(padded.slice(-2));
+        return timeObj(minute, second);
+      }
+
+      return null;
+    }
+
+    function parseDeduct(raw) {
+      const match = String(raw || "").match(/扣([0-9一二三四五六七八九十兩]+)秒?/);
+      if (!match) return 0;
+      return chineseNumberToInt(String(match[1]).replace(/兩/g, "二")) || 0;
+    }
+
+    function timeObj(minute, second) {
+      if (!Number.isFinite(minute) || !Number.isFinite(second) || second < 0 || second > 59) return null;
+      const total = minute * 60 + second;
+      return { minute, second, total, label: `${minute}:${String(second).padStart(2, "0")}` };
+    }
+
+    function splitCommands(text) {
+      const normalized = normalizeText(text).replace(/請整理|整理/g, ",");
+      const rough = normalized.split(",").filter(Boolean);
+      const commands = [];
+      const tokens = nameTokens();
+      for (const part of rough) {
+        const matches = [];
+        const actionMatches = [...part.matchAll(/([0-9一二三四五六七八九十:：分秒]+(?:扣[0-9一二三四五六七八九十兩]+秒?)?)(出發|回來|到達|抵達|回到)?/g)];
+        for (const actionMatch of actionMatches) {
+          if (!actionMatch[2] && !actionMatch[1].includes("扣")) continue;
+          const beforeTime = part.slice(0, actionMatch.index);
+          const nameToken = tokens.find((item) => beforeTime.endsWith(item.token));
+          if (nameToken) {
+            matches.push([`${nameToken.token}${actionMatch[0]}`, nameToken.name, actionMatch[1], normalizeAction(actionMatch[2] || "回來")]);
+          }
+        }
+        if (!matches.length) matches.push(...part.matchAll(/([\u4e00-\u9fff]{2,4})([0-9一二三四五六七八九十:：分秒]+(?:扣[0-9一二三四五六七八九十兩]+秒?)?)(出發|回來|到達|抵達|回到)?/g));
+        if (matches.length) {
+          for (const m of matches) {
+            const fallbackAction = String(m[2]).includes("扣") ? "回來" : "";
+            const action = normalizeAction(m[3] || fallbackAction);
+            if (!action) {
+              commands.push({ raw: m[0], error: "缺少出發或回來" });
+              continue;
+            }
+            commands.push({ raw: m[0], name: canonicalName(m[1]), timeRaw: m[2], action });
+          }
+        } else if (part.trim()) {
+          commands.push({ raw: part, error: "無法拆成「姓名 + 時間 + 出發/回來」" });
+        }
+      }
+      return commands;
+    }
+
+    function normalizeAction(action) {
+      if (!action) return "";
+      return action === "出發" ? "出發" : "回來";
+    }
+
+    function parseAll() {
+      state.entries = [];
+      state.issues = [];
+      const commands = splitCommands(el("commandBox").value);
+      for (const command of commands) {
+        if (command.error) {
+          state.issues.push({ raw: command.raw, issue: command.error });
+          continue;
+        }
+        const parsedTime = parseTime(command.timeRaw);
+        if (!parsedTime) {
+          state.issues.push({ raw: command.raw, issue: `時間無法判讀：${command.timeRaw}` });
+          continue;
+        }
+        addEntry(command.name, command.action, parsedTime, command.raw, false, parseDeduct(command.timeRaw));
+      }
+      render();
+      const ok = state.entries.length;
+      const bad = state.issues.length;
+      setStatus(`已整理 ${ok} 筆紀錄${bad ? `，有 ${bad} 筆需要確認` : ""}。`, bad ? "bad" : "good");
+    }
+
+    function addEntry(name, action, parsedTime, raw, shouldRender = true, deductSeconds = 0) {
+      state.entries.push({
+        id: `${Date.now()}-${Math.random()}`,
+        name,
+        action,
+        time: parsedTime,
+        deductSeconds,
+        raw: raw || `${name}${parsedTime.label}${action}`,
+      });
+      if (shouldRender) {
+        render();
+        setStatus(`已加入：${name} ${parsedTime.label} ${action}`, "good");
+      }
+    }
+
+    function actionIndex(entry) {
+      return state.entries
+        .filter((item) => item.name === entry.name && item.action === entry.action)
+        .findIndex((item) => item.id === entry.id) + 1;
+    }
+
+    function grouped() {
+      const names = [...new Set(state.entries.map((entry) => entry.name))];
+      return names.map((name) => {
+        const trips = Array.from({ length: maxTrips }, () => ({ start: null, back: null }));
+        for (const entry of state.entries.filter((item) => item.name === name)) {
+          const index = actionIndex(entry) - 1;
+          if (index >= 0 && index < maxTrips) trips[index][entry.action === "出發" ? "start" : "back"] = entry;
+        }
+        return { name, trips };
+      });
+    }
+
+    function tripRankMaps(rows) {
+      return Array.from({ length: maxTrips }, (_, tripIndex) => {
+        const results = rows
+          .map(({ name, trips }) => {
+            const trip = trips[tripIndex];
+            if (!trip.back) return null;
+          if (!trip.start && !(trip.back.deductSeconds || 0)) return null;
+          const seconds = trip.start
+              ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0)
+              : trip.back.time.total - (trip.back.deductSeconds || 0);
+            return seconds >= 0 ? { name, seconds } : null;
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.seconds - b.seconds);
+        const map = new Map();
+        let rank = 0;
+        let previous = null;
+        results.forEach((item, index) => {
+          if (item.seconds !== previous) rank = index + 1;
+          previous = item.seconds;
+          map.set(item.name, rank);
+        });
+        return map;
+      });
+    }
+
+    function swimmerMetrics(trips) {
+      const completed = trips
+        .map((trip, index) => {
+          if (!trip.back) return null;
+          if (!trip.start && !(trip.back.deductSeconds || 0)) return null;
+          const seconds = trip.start
+            ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0)
+            : trip.back.time.total - (trip.back.deductSeconds || 0);
+          return seconds >= 0 ? { index, seconds } : null;
+        })
+        .filter(Boolean);
+      if (!completed.length) return { completed, pb: "", latest: "", improvement: "", bestTrip: "" };
+      const pbItem = completed.reduce((best, item) => item.seconds < best.seconds ? item : best, completed[0]);
+      const first = completed[0].seconds;
+      const latest = completed[completed.length - 1].seconds;
+      return {
+        completed,
+        pb: pbItem.seconds,
+        latest,
+        improvement: first - latest,
+        bestTrip: `第${pbItem.index + 1}趟`,
+      };
+    }
+
+    function fmt(total) {
+      if (total === null || total === undefined || total === "") return "";
+      const sign = total < 0 ? "-" : "";
+      const abs = Math.abs(total);
+      return `${sign}${Math.floor(abs / 60)}:${String(abs % 60).padStart(2, "0")}`;
+    }
+
+    function render() {
+      const rows = grouped();
+      const rankMaps = tripRankMaps(rows);
+      el("summaryTable").innerHTML = `
+        <thead>
+          <tr>
+            <th>姓名</th>
+            ${Array.from({ length: maxTrips }, (_, i) => `<th>第${i + 1}趟成績</th>`).join("")}
+            <th>完成</th><th>PB</th><th>PB趟次</th><th>最新</th><th>進步</th><th>平均</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.length ? rows.map(({ name, trips }) => {
+            const results = trips.map((trip) => trip.back
+              ? (!trip.start && !(trip.back.deductSeconds || 0) ? null : (trip.start ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0) : trip.back.time.total - (trip.back.deductSeconds || 0)))
+              : null);
+            const valid = results.filter((v) => v !== null && v >= 0);
+            const metrics = swimmerMetrics(trips);
+            const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "";
+            return `<tr>
+              <td><strong>${escapeHtml(name)}</strong></td>
+              ${trips.map((trip, i) => {
+                const result = results[i];
+                const bad = result !== null && result < 0;
+                const rank = result !== null && result >= 0 ? rankMaps[i].get(name) : "";
+                const resultLabel = bad ? "回來早於出發" : fmt(result);
+                const detailArgs = [
+                  name,
+                  i + 1,
+                  trip.start ? trip.start.time.label : "",
+                  trip.back ? `${trip.back.time.label}${trip.back.deductSeconds ? ` 扣${trip.back.deductSeconds}秒` : ""}` : "",
+                  resultLabel,
+                  rank ? `#${rank}` : "",
+                ].map((value) => JSON.stringify(value)).join(",");
+                return `<td class="${bad ? "issue" : "result"}">${
+                  resultLabel
+                    ? `<button class="result-btn" onclick='showTripDetail(${detailArgs})'>${resultLabel}${rank ? `<span class="rank">#${rank}</span>` : ""}</button>`
+                    : ""
+                }</td>`;
+              }).join("")}
+              <td>${valid.length}</td>
+              <td class="result">${fmt(metrics.pb)}</td>
+              <td>${metrics.bestTrip}</td>
+              <td>${fmt(metrics.latest)}</td>
+              <td class="${metrics.improvement > 0 ? "metric-good" : "metric-muted"}">${metrics.improvement === "" ? "" : (metrics.improvement > 0 ? `+${metrics.improvement}秒` : `${metrics.improvement}秒`)}</td>
+              <td>${fmt(avg)}</td>
+            </tr>`;
+          }).join("") : `<tr><td colspan="13">尚未整理。把口令貼到左邊後按「整理」。</td></tr>`}
+        </tbody>`;
+
+      const rawRows = state.entries.map((entry, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${escapeHtml(entry.name)}</td>
+          <td><span class="pill">${entry.action}</span></td>
+          <td>${entry.time.label}</td>
+          <td>${actionIndex(entry)}</td>
+          <td>${escapeHtml(entry.raw)}</td>
+        </tr>`).join("");
+      const issueRows = state.issues.map((issue) => `
+        <tr>
+          <td class="issue">?</td>
+          <td colspan="4" class="issue">${escapeHtml(issue.issue)}</td>
+          <td>${escapeHtml(issue.raw)}</td>
+        </tr>`).join("");
+
+      el("rawTable").innerHTML = `
+        <thead><tr><th>#</th><th>姓名</th><th>動作</th><th>時間</th><th>第幾次</th><th>原始文字</th></tr></thead>
+        <tbody>${rawRows || issueRows ? rawRows + issueRows : `<tr><td colspan="6">尚無紀錄。</td></tr>`}</tbody>`;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function showTripDetail(name, tripNumber, startLabel, backLabel, resultLabel, rankLabel) {
+      el("detailTitle").textContent = `${name} 第${tripNumber}趟`;
+      el("detailContent").innerHTML = `
+        <div class="dialog-row"><span>出發時間</span><strong>${escapeHtml(startLabel || "未記錄")}</strong></div>
+        <div class="dialog-row"><span>回來時間</span><strong>${escapeHtml(backLabel || "未記錄")}</strong></div>
+        <div class="dialog-row"><span>本趟成績</span><strong>${escapeHtml(resultLabel || "未完成")}</strong></div>
+        <div class="dialog-row"><span>本趟排名</span><strong>${escapeHtml(rankLabel || "-")}</strong></div>
+      `;
+      el("detailDialog").classList.add("show");
+    }
+
+    function setupSpeech() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) return null;
+      const rec = new SpeechRecognition();
+      rec.lang = "zh-TW";
+      rec.continuous = true;
+      rec.interimResults = false;
+      rec.onresult = (event) => {
+        let added = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (!event.results[i].isFinal) continue;
+          added += event.results[i][0].transcript + "，";
+        }
+        if (added) {
+          el("commandBox").value += added;
+          if (/請整理|整理/.test(added)) parseAll();
+          else setStatus(`已加入語音文字：${added}`, "good");
+        }
+      };
+      rec.onerror = (event) => setStatus(`語音錯誤：${event.error}。也可以直接用鍵盤語音輸入到文字框。`, "bad");
+      rec.onend = () => {
+        if (listening) {
+          try { rec.start(); } catch {}
+        }
+      };
+      return rec;
+    }
+
+    el("listenBtn").addEventListener("click", () => {
+      recognition ||= setupSpeech();
+      if (!recognition) {
+        setStatus("這個瀏覽器不支援內建語音辨識。請直接點文字框，用手機或電腦鍵盤的語音輸入。", "bad");
+        return;
+      }
+      listening = true;
+      try { recognition.start(); } catch {}
+      el("listenBtn").disabled = true;
+      el("stopBtn").disabled = false;
+      setStatus("正在聽。你可以一直講，最後講「請整理」或按整理。", "good");
+    });
+
+    el("stopBtn").addEventListener("click", () => {
+      listening = false;
+      try { recognition?.stop(); } catch {}
+      el("listenBtn").disabled = false;
+      el("stopBtn").disabled = true;
+      setStatus("已停止語音。");
+    });
+
+    el("parseBtn").addEventListener("click", parseAll);
+    el("clearTextBtn").addEventListener("click", () => { el("commandBox").value = ""; setStatus("已清空文字。"); });
+
+    el("closeDetailBtn").addEventListener("click", () => {
+      el("detailDialog").classList.remove("show");
+    });
+
+    el("detailDialog").addEventListener("click", (event) => {
+      if (event.target === el("detailDialog")) el("detailDialog").classList.remove("show");
+    });
+
+    el("fullscreenBtn").addEventListener("click", async () => {
+      try {
+        if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+        else await document.exitFullscreen();
+        setStatus("已切換全螢幕模式。", "good");
+      } catch {
+        setStatus("這個瀏覽器不允許全螢幕，仍可正常使用。", "bad");
+      }
+    });
+
+    el("focusInputBtn").addEventListener("click", () => {
+      el("commandBox").focus();
+      setStatus("游標已回到口令文字框，可以繼續語音輸入。", "good");
+    });
+
+    el("manualAddBtn").addEventListener("click", () => {
+      const name = el("manualName").value.trim();
+      const time = parseTime(el("manualTime").value.trim());
+      const action = el("manualAction").value;
+      if (!name || !time) {
+        setStatus("手動補記失敗：請確認姓名和時間碼。", "bad");
+        return;
+      }
+      addEntry(name, action, time, "手動補記", parseDeduct(el("manualTime").value.trim()));
+    });
+
+    el("resetBtn").addEventListener("click", () => {
+      if (!confirm("確定清空整理結果？左邊口令文字會保留。")) return;
+      state.entries = [];
+      state.issues = [];
+      render();
+      setStatus("已清空整理結果。");
+    });
+
+    el("demoBtn").addEventListener("click", () => {
+      el("commandBox").value = "林立誠000出發，方瑞傑005出發，盧冠宇010出發，林立誠110回來，盧冠宇200回來，方瑞傑130回來，林立誠230出發，林立誠340回來，請整理";
+      parseAll();
+    });
+
+    el("copyBtn").addEventListener("click", async () => {
+      const text = summaryText();
+      try {
+        await navigator.clipboard.writeText(text);
+        setStatus("已複製表格文字。", "good");
+      } catch {
+        setStatus("複製失敗，請改用匯出 CSV。", "bad");
+      }
+    });
+
+    el("exportBtn").addEventListener("click", () => {
+      const csv = "\uFEFF" + summaryCsv();
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `游泳整理_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    function summaryText() {
+      return grouped().map(({ name, trips }) => {
+        const parts = trips.map((trip, i) => {
+          const result = trip.back
+            ? (!trip.start && !(trip.back.deductSeconds || 0) ? null : (trip.start ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0) : trip.back.time.total - (trip.back.deductSeconds || 0)))
+            : null;
+          return `第${i + 1}趟 ${trip.start ? trip.start.time.label : ""} / ${trip.back ? `${trip.back.time.label}${trip.back.deductSeconds ? `扣${trip.back.deductSeconds}秒` : ""}` : ""} / ${fmt(result)}`;
+        });
+        return `${name}\t${parts.join("\t")}`;
+      }).join("\n");
+    }
+
+    function summaryCsv() {
+      const headers = ["姓名"];
+      for (let i = 1; i <= maxTrips; i++) headers.push(`第${i}趟出發`, `第${i}趟回來`, `第${i}趟成績`);
+      headers.push("完成趟數", "PB", "PB趟次", "最新", "進步秒數", "平均");
+      const rows = [headers];
+      for (const { name, trips } of grouped()) {
+        const row = [name];
+        const results = trips.map((trip) => trip.back
+          ? (!trip.start && !(trip.back.deductSeconds || 0) ? null : (trip.start ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0) : trip.back.time.total - (trip.back.deductSeconds || 0)))
+          : null);
+        const valid = results.filter((v) => v !== null && v >= 0);
+        const metrics = swimmerMetrics(trips);
+        trips.forEach((trip, i) => row.push(trip.start?.time.label || "", trip.back ? `${trip.back.time.label}${trip.back.deductSeconds ? ` 扣${trip.back.deductSeconds}秒` : ""}` : "", fmt(results[i])));
+        row.push(
+          valid.length,
+          fmt(metrics.pb),
+          metrics.bestTrip,
+          fmt(metrics.latest),
+          metrics.improvement === "" ? "" : metrics.improvement,
+          fmt(valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "")
+        );
+        rows.push(row);
+      }
+      return rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+    }
+
+    render();
+  </script>
+</body>
+</html>
