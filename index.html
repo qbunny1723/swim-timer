@@ -6,41 +6,213 @@
   <title>游泳成績語音記錄系統</title>
   <style>
     :root {
-      --bg: #08131d;
+      /* Base (Splash Party - cartoon) */
+      --bg: #fff9f0;
       --panel: #ffffff;
-      --ink: #122b35;
-      --muted: #607580;
-      --line: #d8e3e7;
-      --accent: #0e6474;
-      --accent-soft: #dceff2;
-      --warn: #d8b45d;
-      --bad: #b42318;
-      --good: #137a4f;
-      --hero-dark: #02070d;
-      --hero-water: #04aeea;
-      --hero-light: rgba(142, 225, 255, .9);
-      --save: #0e6474;
-      --rank: #d8b45d;
-      --secondary-bg: #e7eef1;
+      --ink: #3a2a20;
+      --muted: #b08880;
+      --line: #ffe0d0;
+      --accent: #ff6b9d;
+      --accent-soft: #fff0f6;
+      --warn: #ffd93d;
+      --bad: #e05050;
+      --good: #28a860;
+      --hero-dark: #1a0a14;
+      --hero-water: #4dc8f0;
+      --hero-light: rgba(160,230,255,.85);
+      --save: #4dc8f0;
+      --rank: #ffd93d;
+      --secondary-bg: #fff0e8;
+      --btn-voice-bg: #ff6b9d;
+      --btn-voice-color: #fff;
+      --btn-parse-bg: #ffd93d;
+      --btn-parse-color: #7a5200;
+      --btn-stop-bg: #a8edea;
+      --btn-stop-color: #1a6b68;
+      --btn-clear-bg: #ffe0b2;
+      --btn-clear-color: #7a4800;
+      --header-grad: linear-gradient(160deg,#4dc8f0,#7be6a0,#4dc8f0);
+      --header-text: #1a4a2e;
+      --header-sub: #2d7a50;
+      --rank1-bg: #ff6b9d; --rank1-color: #fff;
+      --rank2-bg: #ffd93d; --rank2-color: #7a5200;
+      --rank3-bg: #a8edea; --rank3-color: #1a5a58;
+      --rank4-bg: #e0e0e0; --rank4-color: #666;
+      --pb-border: #ff6b9d;
+      --pb-text: #cc4477;
+      --live-bg: #ff6b9d;
+      --live-text: #fff;
+      --detail-btn-color: #cc4477;
+      --theme-border-radius: 12px;
+      --theme-font: "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
     }
 
     * { box-sizing: border-box; }
 
-    body[data-theme="prestige"] {
-      --bg: #e9f4f2;
-      --panel: #fffdf7;
-      --ink: #123334;
-      --muted: #667c78;
-      --line: #d7e3dd;
-      --accent: #0f6b69;
-      --accent-soft: #dcefeb;
-      --warn: #d95f52;
-      --hero-dark: #062522;
-      --hero-water: #15b5c5;
-      --hero-light: rgba(171, 244, 236, .85);
-      --save: #c94f45;
-      --rank: #d8b45d;
-      --secondary-bg: #edf3ef;
+    /* ── Splash Party (cartoon) ── already set in :root above ── */
+
+    /* ── Morning Mist (soft) ── */
+    body[data-theme="mist"] {
+      --bg: #f5eff8;
+      --panel: #fefcff;
+      --ink: #3d2a5a;
+      --muted: #9a88b0;
+      --line: #e8dff0;
+      --accent: #8b6dbd;
+      --accent-soft: #f0eaf8;
+      --warn: #e88baa;
+      --bad: #c05a80;
+      --good: #5a8a6a;
+      --hero-dark: #1a0a2e;
+      --hero-water: #b090e0;
+      --hero-light: rgba(200,180,255,.8);
+      --save: #e88baa;
+      --rank: #e8c8d8;
+      --secondary-bg: #f0eaf8;
+      --btn-voice-bg: #8b6dbd;
+      --btn-voice-color: #fff;
+      --btn-parse-bg: #5a7ab0;
+      --btn-parse-color: #fff;
+      --btn-stop-bg: #e8dff0;
+      --btn-stop-color: #9a88b0;
+      --btn-clear-bg: #e8dff0;
+      --btn-clear-color: #9a88b0;
+      --header-grad: linear-gradient(160deg,#e8d5f5,#d5eaf5,#e8d5f5);
+      --header-text: #3d2a5a;
+      --header-sub: #7a5a9a;
+      --rank1-bg: #8b6dbd; --rank1-color: #fff;
+      --rank2-bg: #e88baa; --rank2-color: #fff;
+      --rank3-bg: #b0d0e8; --rank3-color: #2a5a7a;
+      --rank4-bg: #e8dff0; --rank4-color: #7a6890;
+      --pb-border: #e88baa;
+      --pb-text: #c05a80;
+      --live-bg: #8b6dbd;
+      --live-text: #fff;
+      --detail-btn-color: #c05a80;
+      --theme-border-radius: 10px;
+    }
+
+    /* ── Ice Speed ── */
+    body[data-theme="ice"] {
+      --bg: #060d1a;
+      --panel: #0a1020;
+      --ink: #e0f4ff;
+      --muted: #4a6880;
+      --line: #162038;
+      --accent: #00d4ff;
+      --accent-soft: #001a22;
+      --warn: #0a60ff;
+      --bad: #ff5050;
+      --good: #00d4aa;
+      --hero-dark: #020810;
+      --hero-water: #00a0d0;
+      --hero-light: rgba(0,200,255,.6);
+      --save: #0a60ff;
+      --rank: #00d4ff;
+      --secondary-bg: #101828;
+      --btn-voice-bg: #00d4ff;
+      --btn-voice-color: #001a22;
+      --btn-parse-bg: #0a60ff;
+      --btn-parse-color: #fff;
+      --btn-stop-bg: #162038;
+      --btn-stop-color: #4a6880;
+      --btn-clear-bg: #162038;
+      --btn-clear-color: #4a6880;
+      --header-grad: linear-gradient(160deg,#060d1a,#0c1630,#060d1a);
+      --header-text: #ffffff;
+      --header-sub: #6a9acc;
+      --rank1-bg: #00d4ff; --rank1-color: #001a22;
+      --rank2-bg: #0a60ff; --rank2-color: #fff;
+      --rank3-bg: #162038; --rank3-color: #6a9acc;
+      --rank4-bg: #0d1828; --rank4-color: #4a6880;
+      --pb-border: #0a60ff;
+      --pb-text: #00d4ff;
+      --live-bg: #00d4ff;
+      --live-text: #001a22;
+      --detail-btn-color: #00d4ff;
+      --theme-border-radius: 6px;
+    }
+
+    /* ── Deep Amber ── */
+    body[data-theme="amber"] {
+      --bg: #070a14;
+      --panel: #0d1020;
+      --ink: #d0e4f8;
+      --muted: #506078;
+      --line: #182038;
+      --accent: #e89820;
+      --accent-soft: #2a1c08;
+      --warn: #c87810;
+      --bad: #e05050;
+      --good: #28a870;
+      --hero-dark: #020508;
+      --hero-water: #b07010;
+      --hero-light: rgba(220,160,30,.5);
+      --save: #e89820;
+      --rank: #c87810;
+      --secondary-bg: #101828;
+      --btn-voice-bg: #c87810;
+      --btn-voice-color: #fff8e0;
+      --btn-parse-bg: #182038;
+      --btn-parse-color: #e89820;
+      --btn-stop-bg: #101828;
+      --btn-stop-color: #506078;
+      --btn-clear-bg: #101828;
+      --btn-clear-color: #506078;
+      --header-grad: linear-gradient(160deg,#070a14,#0e1428,#070a14);
+      --header-text: #f0c870;
+      --header-sub: #806830;
+      --rank1-bg: #e89820; --rank1-color: #1a1000;
+      --rank2-bg: #c87810; --rank2-color: #fff8e0;
+      --rank3-bg: #182038; --rank3-color: #6a9acc;
+      --rank4-bg: #101828; --rank4-color: #506078;
+      --pb-border: #c87810;
+      --pb-text: #e89820;
+      --live-bg: #c87810;
+      --live-text: #fff8e0;
+      --detail-btn-color: #e89820;
+      --theme-border-radius: 6px;
+    }
+
+    /* ── Rainbow Bunny ── */
+    body[data-theme="bunny"] {
+      --bg: #fff0f8;
+      --panel: #ffffff;
+      --ink: #3a1a40;
+      --muted: #c098b8;
+      --line: #f0d8f0;
+      --accent: #ff6b9d;
+      --accent-soft: #fff0f8;
+      --warn: #ffd93d;
+      --bad: #e05050;
+      --good: #28b888;
+      --hero-dark: #1a0820;
+      --hero-water: #ff9ad0;
+      --hero-light: rgba(255,180,220,.7);
+      --save: #a78bfa;
+      --rank: #ffd93d;
+      --secondary-bg: #fff0f8;
+      --btn-voice-bg: #ff6b9d;
+      --btn-voice-color: #fff;
+      --btn-parse-bg: #a78bfa;
+      --btn-parse-color: #fff;
+      --btn-stop-bg: #6ee7b7;
+      --btn-stop-color: #065f46;
+      --btn-clear-bg: #fde68a;
+      --btn-clear-color: #78350f;
+      --header-grad: linear-gradient(135deg,#ffb3d1,#ffcba4,#fff4a3,#b3f0d1,#b3d9ff,#d4b3ff);
+      --header-text: #5a1a4a;
+      --header-sub: #a04080;
+      --rank1-bg: #ff6b9d; --rank1-color: #fff;
+      --rank2-bg: #a78bfa; --rank2-color: #fff;
+      --rank3-bg: #6ee7b7; --rank3-color: #065f46;
+      --rank4-bg: #fde68a; --rank4-color: #78350f;
+      --pb-border: #ff6b9d;
+      --pb-text: #cc4477;
+      --live-bg: linear-gradient(90deg,#ff6b9d,#f9a825,#43a047,#1e88e5,#8e24aa);
+      --live-text: #fff;
+      --detail-btn-color: #a78bfa;
+      --theme-border-radius: 16px;
     }
 
     html, body {
@@ -60,13 +232,8 @@
       width: 100vw;
       max-width: 100vw;
       padding: 22px 20px 18px;
-      background:
-        radial-gradient(circle at 16% 18%, rgba(255,255,255,.92) 0 2%, transparent 10%),
-        radial-gradient(circle at 88% 17%, rgba(255,255,255,.82) 0 2%, transparent 11%),
-        radial-gradient(circle at 50% 58%, rgba(49,205,255,.55), transparent 33%),
-        linear-gradient(180deg, rgba(0,0,0,.3), rgba(0,0,0,.68)),
-        linear-gradient(115deg, #02070d, #06344d 48%, #02070d);
-      color: #fff;
+      background: var(--header-grad, linear-gradient(160deg,#4dc8f0,#7be6a0,#4dc8f0));
+      color: var(--header-text, #1a4a2e);
       display: flex;
       align-items: stretch;
       justify-content: space-between;
@@ -77,32 +244,7 @@
       isolation: isolate;
     }
 
-    header::before {
-      content: "";
-      position: absolute;
-      left: -8%;
-      right: -8%;
-      bottom: -18%;
-      height: 48%;
-      background:
-        repeating-linear-gradient(90deg, rgba(255,255,255,.18) 0 2px, transparent 2px 30px),
-        linear-gradient(180deg, rgba(0,190,235,.78), rgba(0,38,60,.18));
-      transform: skewY(-2deg);
-      z-index: -1;
-    }
-
-    header::after {
-      content: "";
-      position: absolute;
-      left: 10%;
-      right: 10%;
-      top: 43%;
-      height: 64px;
-      background: linear-gradient(90deg, transparent, rgba(183,239,255,.88), transparent);
-      filter: blur(7px);
-      opacity: .62;
-      z-index: -1;
-    }
+    header::before, header::after { display: none; }
 
     .hero-copy {
       display: flex;
@@ -172,45 +314,17 @@
       line-height: 1.05;
       font-weight: 950;
       font-style: italic;
-      color: transparent;
-      background:
-        linear-gradient(180deg, #ffffff 0%, #b8c0c5 19%, #f7fbff 31%, #717b83 47%, #f9fcff 61%, #9ba5ab 76%, #eef5f8 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-stroke: 1.3px #d6a74c;
-      filter: drop-shadow(0 2px 0 #5a3a0c) drop-shadow(0 5px 0 #101820) drop-shadow(0 14px 18px rgba(0,0,0,.85));
-      text-shadow:
-        1px 1px 0 #f6d27a,
-        2px 2px 0 #8b651f,
-        3px 3px 0 #26323a,
-        4px 5px 0 #071018,
-        0 -1px 7px rgba(255,255,255,.95),
-        0 0 22px rgba(101,210,255,.32);
-    }
-
-    body[data-theme="prestige"] h1 {
-      background:
-        repeating-linear-gradient(105deg, #fbfdff 0 6px, #9ba4aa 7px 10px, #ffffff 11px 15px, #737c83 16px 19px),
-        linear-gradient(180deg, #ffffff, #77828a 48%, #ffffff);
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-stroke: 1.6px #e1b654;
-      filter: drop-shadow(0 1px 0 #ffe59d) drop-shadow(0 4px 0 #8c6822) drop-shadow(0 8px 0 #0d151b) drop-shadow(0 18px 22px rgba(0,0,0,.68));
-      text-shadow:
-        1px 0 #fff,
-        2px 1px #b7862a,
-        4px 3px #26323a,
-        6px 6px #05090d,
-        0 -2px 10px rgba(255,255,255,.9),
-        0 0 26px rgba(255,225,145,.3);
+      color: var(--header-text, #1a4a2e);
+      text-shadow: 0 2px 12px rgba(0,0,0,.2);
     }
 
     .hero-subtitle {
       margin-top: 9px;
       font-size: 22px;
       font-weight: 850;
-      opacity: .9;
+      opacity: .85;
       max-width: 560px;
+      color: var(--header-sub, #2d7a50);
     }
 
     main {
@@ -240,9 +354,13 @@
 
     .section-title {
       padding: 12px 14px;
-      background: color-mix(in srgb, var(--accent-soft), #fff 55%);
+      background: var(--accent-soft);
       border-bottom: 1px solid var(--line);
       font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
     }
 
     .body { padding: 14px; }
@@ -270,7 +388,7 @@
       min-height: 44px;
       border: 1px solid var(--line);
       border-radius: 999px;
-      background: rgba(255,255,255,.92);
+      background: var(--panel);
       color: var(--ink);
       font-size: 13px;
       font-weight: 850;
@@ -300,6 +418,7 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--panel);
+      color: var(--ink);
       box-shadow: 0 18px 42px rgba(0,0,0,.12);
     }
 
@@ -313,7 +432,7 @@
       border-radius: 7px;
       padding: 10px 11px;
       font: inherit;
-      background: #fff;
+      background: var(--panel);
       color: var(--ink);
     }
 
@@ -357,6 +476,7 @@
     button.secondary {
       color: var(--ink);
       background: var(--secondary-bg);
+      border: 1px solid var(--line);
     }
 
     button.warning {
@@ -378,14 +498,14 @@
       margin-top: 10px;
       border-radius: 7px;
       padding: 10px 11px;
-      background: #eef6f6;
+      background: var(--accent-soft);
       color: var(--muted);
       line-height: 1.5;
       min-height: 42px;
     }
 
-    .status.good { color: var(--good); background: #e8f6ef; }
-    .status.bad { color: var(--bad); background: #fff0ee; }
+    .status.good { color: var(--good); background: var(--accent-soft); }
+    .status.bad { color: var(--bad); background: var(--accent-soft); }
 
     .grid-4 {
       display: grid;
@@ -417,7 +537,7 @@
       top: 0;
       z-index: 1;
       background: var(--accent-soft);
-      color: #12343b;
+      color: var(--ink);
       font-weight: 700;
     }
 
@@ -493,7 +613,7 @@
     .dialog {
       width: min(420px, 100%);
       border-radius: 8px;
-      background: #fff;
+      background: var(--panel);
       border: 1px solid var(--line);
       box-shadow: 0 24px 60px rgba(0, 0, 0, .25);
       overflow: hidden;
@@ -526,18 +646,318 @@
     }
 
     .examples {
-      background: #fbf7e6;
-      border: 1px solid #eadc9b;
+      background: var(--accent-soft);
+      border: 1px solid var(--line);
       border-radius: 7px;
       padding: 10px 11px;
       line-height: 1.65;
       font-size: 13px;
-      color: #4b3a08;
+      color: var(--muted);
       margin-top: 10px;
     }
 
-    @media (max-width: 980px) {
-      body { background: #fff; }
+    /* ===== NEW PRESTIGE DESIGN ELEMENTS ===== */
+
+    /* Section title with badge */
+    /* section-title merged above */
+
+    .live-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      letter-spacing: .3px;
+      white-space: nowrap;
+    }
+
+    .pb-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 4px;
+      border: 1px solid var(--save);
+      color: var(--save);
+      background: transparent;
+      white-space: nowrap;
+    }
+
+    body[data-theme="prestige"] .pb-badge {
+      color: #c94f45;
+      border-color: #c94f45;
+    }
+
+    /* Char count row */
+    .char-count-row {
+      text-align: right;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+      margin-bottom: 8px;
+    }
+
+    /* 3-button action row */
+    .button-row-3 {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .btn-voice {
+      background: var(--btn-voice-bg) !important;
+      color: var(--btn-voice-color) !important;
+    }
+
+    .btn-parse {
+      background: var(--btn-parse-bg) !important;
+      color: var(--btn-parse-color) !important;
+    }
+
+    .btn-save-main {
+      background: var(--btn-stop-bg) !important;
+      color: var(--btn-stop-color) !important;
+      opacity: 1 !important;
+    }
+
+    .btn-save-main:disabled {
+      background: var(--secondary-bg) !important;
+      color: var(--muted) !important;
+      opacity: .7 !important;
+    }
+
+    button.btn-clear-text {
+      background: var(--btn-clear-bg) !important;
+      color: var(--btn-clear-color) !important;
+    }
+
+    .btn-save-coral {
+      background: var(--save) !important;
+      color: #fff !important;
+      border: 0;
+      border-radius: 7px;
+      padding: 11px 18px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    /* Extra button row (collapsible small buttons) */
+    .extra-btns {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+
+    .extra-btns button {
+      flex: 1 1 auto;
+      min-height: 36px;
+      font-size: 12px;
+      padding: 7px 10px;
+    }
+
+    /* Save row layout */
+    .save-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    .save-field {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .save-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 0;
+    }
+
+    .save-input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 9px 10px;
+      font: inherit;
+      background: var(--panel);
+      color: var(--ink);
+    }
+
+    /* See detail row */
+    .see-detail-row {
+      text-align: center;
+      padding: 10px 14px;
+      border-top: 1px solid var(--line);
+    }
+
+    .see-detail-btn {
+      background: transparent !important;
+      color: var(--save) !important;
+      border: 0 !important;
+      font: inherit !important;
+      font-weight: 700 !important;
+      font-size: 14px !important;
+      cursor: pointer !important;
+      padding: 4px 8px !important;
+      min-height: 0 !important;
+    }
+
+    /* see-detail now uses --detail-btn-color var */
+
+    /* Textarea compact */
+    .input-section textarea {
+      min-height: 120px;
+    }
+
+    .btn-stop-theme {
+      background: var(--btn-stop-bg) !important;
+      color: var(--btn-stop-color) !important;
+      opacity: 1 !important;
+    }
+    .btn-stop-theme:disabled {
+      background: var(--secondary-bg) !important;
+      color: var(--muted) !important;
+      opacity: .55 !important;
+    }
+    /* clear btn uses secondary styling */
+    #clearTextBtn {
+      background: var(--btn-clear-bg) !important;
+      color: var(--btn-clear-color) !important;
+    }
+
+    /* Rank color badges - per rank position */
+    .rank { display: none; } /* hide old generic rank, use rank-colored below */
+
+    .rank-badge {
+      display: inline-block;
+      margin-left: 4px;
+      border-radius: 999px;
+      padding: 1px 6px;
+      font-size: 11px;
+      font-weight: 800;
+      vertical-align: 1px;
+    }
+    .rank-1 { background: var(--rank1-bg); color: var(--rank1-color); }
+    .rank-2 { background: var(--rank2-bg); color: var(--rank2-color); }
+    .rank-3 { background: var(--rank3-bg); color: var(--rank3-color); }
+    .rank-4up { background: var(--rank4-bg); color: var(--rank4-color); }
+
+    /* See detail button uses theme color */
+    .see-detail-btn {
+      background: transparent !important;
+      color: var(--detail-btn-color) !important;
+      border: 0 !important;
+      font: inherit !important;
+      font-weight: 700 !important;
+      font-size: 14px !important;
+      cursor: pointer !important;
+      padding: 4px 8px !important;
+      min-height: 0 !important;
+    }
+
+    /* PB badge uses theme color */
+    .pb-badge {
+      border-color: var(--pb-border) !important;
+      color: var(--pb-text) !important;
+    }
+
+    /* Live badge */
+    .live-badge {
+      background: var(--live-bg) !important;
+      color: var(--live-text) !important;
+    }
+
+    /* Theme selector panel - expanded */
+    .settings-panel {
+      width: 220px !important;
+    }
+
+    .theme-btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      padding: 6px 0 2px;
+    }
+
+    .theme-option {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 6px 4px;
+      border-radius: 8px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: border-color .15s;
+      background: rgba(255,255,255,.1);
+    }
+
+    .theme-option:hover { background: rgba(255,255,255,.2); }
+    .theme-option.active { border-color: rgba(255,255,255,.7); }
+
+    .theme-swatch {
+      width: 32px;
+      height: 20px;
+      border-radius: 5px;
+      border: 1px solid rgba(255,255,255,.2);
+    }
+
+    .theme-option-label {
+      font-size: 10px;
+      color: #fff;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    /* Bunny header fun */
+    body[data-theme="bunny"] header {
+      background: linear-gradient(135deg,#ffb3d1,#ffcba4,#fff4a3,#b3f0d1,#b3d9ff,#d4b3ff,#ffb3d1) !important;
+      background-size: 300% 300% !important;
+      animation: bunnyRainbow 6s ease infinite !important;
+    }
+
+    @keyframes bunnyRainbow {
+      0%{background-position:0% 50%}
+      50%{background-position:100% 50%}
+      100%{background-position:0% 50%}
+    }
+
+    body[data-theme="bunny"] h1 {
+      background: linear-gradient(90deg,#ff6b9d,#f9a825,#43a047,#1e88e5,#8e24aa) !important;
+      -webkit-background-clip: text !important;
+      background-clip: text !important;
+      color: transparent !important;
+      -webkit-text-stroke: 0 !important;
+      filter: none !important;
+    }
+
+    body[data-theme="bunny"] section {
+      border-radius: var(--theme-border-radius);
+    }
+
+    body[data-theme="bunny"] .live-badge {
+      background: linear-gradient(90deg,#ff6b9d,#f9a825,#43a047,#1e88e5,#8e24aa) !important;
+    }
+
+    /* header and h1 now use CSS vars directly */
+
+    /* Card border radius per theme */
+    section { border-radius: var(--theme-border-radius, 8px); }
+
+    /* header uses --header-grad var */
+
+    /* ===== END NEW STYLES ===== */
+
+        @media (max-width: 980px) {
+      body { background: var(--bg); }
       header {
         position: sticky;
         top: 0;
@@ -572,7 +992,7 @@
         position: sticky;
         bottom: 0;
         z-index: 4;
-        background: rgba(255, 255, 255, .96);
+        background: var(--panel);
         padding: 8px 0 0;
       }
       button { min-height: 46px; }
@@ -595,10 +1015,31 @@
       <div class="hero-subtitle">游泳成績語音記錄系統</div>
     </div>
     <div class="settings-menu">
-      <button id="settingsToggleBtn" class="settings-toggle" type="button">設定</button>
-      <div id="settingsPanel" class="settings-panel" aria-label="版面切換" hidden>
-        <button id="themeMidnightBtn" type="button">競技深色</button>
-        <button id="themePrestigeBtn" type="button">高級海洋</button>
+      <button id="settingsToggleBtn" class="settings-toggle" type="button">🎨 配色</button>
+      <div id="settingsPanel" class="settings-panel" aria-label="配色選擇" hidden>
+        <div style="color:#fff;font-size:11px;font-weight:800;padding:4px 2px 6px;opacity:.7;letter-spacing:.5px;">選擇配色主題</div>
+        <div class="theme-btn-row">
+          <button class="theme-option" data-theme="splash" type="button">
+            <div class="theme-swatch" style="background:linear-gradient(135deg,#ff6b9d,#4dc8f0);"></div>
+            <span class="theme-option-label">🎉 卡通</span>
+          </button>
+          <button class="theme-option" data-theme="mist" type="button">
+            <div class="theme-swatch" style="background:linear-gradient(135deg,#8b6dbd,#e88baa);"></div>
+            <span class="theme-option-label">🌸 柔和</span>
+          </button>
+          <button class="theme-option" data-theme="ice" type="button">
+            <div class="theme-swatch" style="background:linear-gradient(135deg,#00d4ff,#0a60ff);"></div>
+            <span class="theme-option-label">⚡ 極速</span>
+          </button>
+          <button class="theme-option" data-theme="amber" type="button">
+            <div class="theme-swatch" style="background:linear-gradient(135deg,#e89820,#070a14);"></div>
+            <span class="theme-option-label">🌊 琥珀</span>
+          </button>
+          <button class="theme-option" data-theme="bunny" type="button" style="grid-column:1/-1;">
+            <div class="theme-swatch" style="background:linear-gradient(90deg,#ff6b9d,#ffd93d,#6ee7b7,#a78bfa);width:100%;"></div>
+            <span class="theme-option-label">🐰 彩虹兔</span>
+          </button>
+        </div>
       </div>
     </div>
   </header>
@@ -606,22 +1047,24 @@
   <main>
     <div>
       <section class="input-section">
-        <div class="section-title">一直說，最後整理</div>
+        <div class="section-title">
+          口令文字
+          <span class="live-badge">＋ 即時整理中</span>
+        </div>
         <div class="body">
-          <label for="commandBox">口令文字</label>
           <textarea id="commandBox" placeholder="例：林立誠000出發，方瑞傑005出發，盧冠宇010出發，林立誠110回來，盧冠宇200回來，方瑞傑130回來，請整理"></textarea>
-          <div class="button-row">
-            <button id="listenBtn">開始語音</button>
-            <button id="stopBtn" class="secondary" disabled>停止</button>
-            <button id="parseBtn" class="warning">整理</button>
-            <button id="clearTextBtn" class="secondary">清空文字</button>
-            <button id="fullscreenBtn">全螢幕</button>
-            <button id="focusInputBtn" class="secondary">繼續輸入</button>
+          <div class="char-count-row"><span id="charCount">0 / 300</span></div>
+          <div class="button-row-3">
+            <button id="listenBtn" class="btn-voice">🎤 開始語音</button>
+            <button id="parseBtn" class="btn-parse">✦ 整理</button>
+            <button id="stopBtn" class="btn-stop-theme" disabled>⬛ 停止</button>
           </div>
           <div id="status" class="status">可以用手機/電腦鍵盤的語音輸入一直講，最後按整理。Chrome/Edge 可試用「開始語音」。</div>
-          <div class="examples">
-            建議口令：林立誠000出發、方瑞傑005出發、林立誠110回來。<br>
-            時間碼規則：000 = 0:00，005 = 0:05，110 = 1:10，1230 = 12:30。
+          <div class="extra-btns">
+            <button id="clearTextBtn" class="secondary">清空文字</button>
+            <button id="fullscreenBtn" class="secondary">全螢幕</button>
+            <button id="focusInputBtn" class="secondary">繼續輸入</button>
+            <button id="demoBtn" class="secondary">放入範例</button>
           </div>
         </div>
       </section>
@@ -714,29 +1157,49 @@
       </section>
 
       <section class="save-section" style="margin-top:16px;">
-        <div class="section-title">資料操作</div>
+        <div class="section-title">本組成績</div>
         <div class="body">
-          <div class="grid-4">
-            <input id="groupTitle" placeholder="組別標題，例如：第1組">
-            <input id="resultDate" type="date">
-            <button id="saveResultBtn">儲存本組成績</button>
-            <button id="focusResultBtn" class="secondary">檢查整理表</button>
+          <div class="save-row">
+            <div class="save-field">
+              <label class="save-label">日期</label>
+              <input id="resultDate" type="date" class="save-input">
+            </div>
+            <div class="save-field">
+              <label class="save-label">組別</label>
+              <select id="groupTitle" class="save-input">
+                <option>第1組</option>
+                <option>第2組</option>
+                <option>第3組</option>
+                <option>第4組</option>
+                <option>第5組</option>
+                <option>第6組</option>
+                <option>第7組</option>
+                <option>第8組</option>
+              </select>
+            </div>
+            <button id="saveResultBtn" class="btn-save-coral">💾 儲存</button>
           </div>
-          <p class="small">確認整理表正確後，填日期和第幾組，再按儲存。相同日期會續寫，每組中間空 5 列。</p>
-          <div class="button-row">
-            <button id="exportBtn">匯出 CSV</button>
+          <p class="small" style="display:flex;align-items:center;gap:5px;margin-top:8px;">🔒 儲存後可隨時開啟編輯與查看歷史紀錄</p>
+          <div class="button-row" style="margin-top:8px;">
+            <button id="exportBtn" class="secondary">匯出 CSV</button>
             <button id="copyBtn" class="secondary">複製表格</button>
             <button id="resetBtn" class="danger">清空結果</button>
-            <button id="demoBtn" class="secondary">放入範例</button>
+            <button id="focusResultBtn" class="secondary">檢查整理表</button>
           </div>
         </div>
       </section>
     </div>
 
     <section class="summary-section">
-      <div class="section-title">整理表</div>
+      <div class="section-title">
+        整理表
+        <span class="pb-badge">PB：個人最佳</span>
+      </div>
       <div class="table-wrap">
         <table id="summaryTable"></table>
+      </div>
+      <div class="see-detail-row">
+        <button class="see-detail-btn" id="focusResultBtn2">點擊成績看明細 ∨</button>
       </div>
     </section>
 
@@ -759,7 +1222,7 @@
   </div>
 
   <script>
-    const API_URL = "https://script.google.com/macros/s/AKfycbymdpISVFTDHc989_-cfS1uyf4IG9gkejiw47j1mwwwUjf-118nfeGMlgLdSw32ytzerg/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbzLKnWnLUhGO2nLKm5CCbqX3RfcOkKuDH6ymeVqefDOLiXpjCWSN5Vj5ksM5XkBT8K3Rg/exec"; // 新版游泳 Apps Script /exec 網址
     const SETTINGS_KEY = "swimTimerSettings";
     const maxTrips = 6;
     const state = { entries: [], issues: [] };
@@ -769,18 +1232,33 @@
 
     const el = (id) => document.getElementById(id);
 
+    function currentApiUrl() {
+      return (localStorage.getItem("swimTimerApiUrl") || API_URL || "").trim();
+    }
+
+    function requireApiUrl() {
+      let url = currentApiUrl();
+      if (url) return url;
+      url = prompt("請貼上新版游泳 Apps Script /exec 網址，之後會記在這台瀏覽器：")?.trim() || "";
+      if (url) localStorage.setItem("swimTimerApiUrl", url);
+      return url;
+    }
+
     function setStatus(message, type = "") {
       const box = el("status");
       box.textContent = message;
       box.className = `status ${type}`.trim();
     }
 
+    const THEMES = ["splash","mist","ice","amber","bunny"];
+
     function applyTheme(theme) {
-      const nextTheme = theme === "prestige" ? "prestige" : "midnight";
-      document.body.dataset.theme = nextTheme;
-      try { localStorage.setItem("swimTimerTheme", nextTheme); } catch {}
-      el("themeMidnightBtn").classList.toggle("active", nextTheme === "midnight");
-      el("themePrestigeBtn").classList.toggle("active", nextTheme === "prestige");
+      const t = THEMES.includes(theme) ? theme : "splash";
+      document.body.dataset.theme = t;
+      try { localStorage.setItem("swimTimerTheme", t); } catch {}
+      document.querySelectorAll(".theme-option[data-theme]").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.theme === t);
+      });
     }
 
     function settingsPayload() {
@@ -815,7 +1293,9 @@
 
     async function sheetGet(key) {
       try {
-        const res = await fetch(`${API_URL}?key=${encodeURIComponent(key)}`);
+        const url = currentApiUrl();
+        if (!url) return null;
+        const res = await fetch(`${url}?key=${encodeURIComponent(key)}`);
         const data = await res.json();
         return data.value || null;
       } catch {
@@ -824,7 +1304,9 @@
     }
 
     async function sheetSet(key, value) {
-      await fetch(API_URL, {
+      const url = requireApiUrl();
+      if (!url) throw new Error("missing-api-url");
+      await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify({ key, value }),
@@ -832,7 +1314,9 @@
     }
 
     async function sheetAction(payload) {
-      const res = await fetch(API_URL, {
+      const url = requireApiUrl();
+      if (!url) throw new Error("missing-api-url");
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify(payload),
@@ -1270,9 +1754,10 @@
                   resultLabel,
                   rank ? `#${rank}` : "",
                 ].map((value) => JSON.stringify(value)).join(",");
+                const rankClass = rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : "rank-4up";
                 return `<td class="${bad ? "issue" : "result"}">${
                   resultLabel
-                    ? `<button class="result-btn" onclick='showTripDetail(${detailArgs})'>${resultLabel}${rank ? `<span class="rank">#${rank}</span>` : ""}</button>`
+                    ? `<button class="result-btn" onclick='showTripDetail(${detailArgs})'>${resultLabel}${rank ? `<span class="rank-badge ${rankClass}">#${rank}</span>` : ""}</button>`
                     : ""
                 }</td>`;
               }).join("")}
@@ -1417,7 +1902,7 @@
         setStatus("手動補記失敗：請確認姓名和時間碼。", "bad");
         return;
       }
-      addEntry(name, action, time, "手動補記", parseDeduct(el("manualTime").value.trim()));
+      addEntry(name, action, time, "手動補記", true, parseDeduct(el("manualTime").value.trim()));
     });
 
     el("resetBtn").addEventListener("click", () => {
@@ -1426,6 +1911,21 @@
       state.issues = [];
       render();
       setStatus("已清空整理結果。");
+    });
+
+    // Char counter
+    const commandBox = el("commandBox");
+    const charCount = el("charCount");
+    if (commandBox && charCount) {
+      commandBox.addEventListener("input", () => {
+        charCount.textContent = `${commandBox.value.length} / 300`;
+      });
+    }
+
+    // Wire focusResultBtn2
+    const frb2 = el("focusResultBtn2");
+    if (frb2) frb2.addEventListener("click", () => {
+      el("summaryTable").scrollIntoView({ behavior: "smooth", block: "start" });
     });
 
     el("demoBtn").addEventListener("click", () => {
@@ -1461,8 +1961,13 @@
     el("settingsToggleBtn").addEventListener("click", () => {
       el("settingsPanel").hidden = !el("settingsPanel").hidden;
     });
-    el("themeMidnightBtn").addEventListener("click", () => applyTheme("midnight"));
-    el("themePrestigeBtn").addEventListener("click", () => applyTheme("prestige"));
+    // Theme picker
+    document.querySelectorAll(".theme-option[data-theme]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        applyTheme(btn.dataset.theme);
+        el("settingsPanel").hidden = true;
+      });
+    });
 
     function summaryRows() {
       const headers = ["姓名"];
@@ -1512,7 +2017,7 @@
         setStatus("目前沒有整理表資料可以儲存。", "bad");
         return;
       }
-      setStatus("正在儲存本組成績到 Google Drive...", "good");
+      setStatus("正在儲存本組成績...", "good");
       try {
         const result = await sheetAction({ action: "saveResult", date, title, rows });
         if (result && result.ok) setStatus(`已儲存到 ${date} 分頁：${title}`, "good");
@@ -1539,7 +2044,7 @@
       return rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
     }
 
-    applyTheme(localStorage.getItem("swimTimerTheme") || "midnight");
+    applyTheme(localStorage.getItem("swimTimerTheme") || "splash");
     if (!el("resultDate").value) el("resultDate").value = new Date().toISOString().slice(0, 10);
     if (!el("groupTitle").value) el("groupTitle").value = "第1組";
     render();
