@@ -1498,10 +1498,25 @@
       } catch {}
     }
 
+    function normalizeTimeObject(time) {
+      if (!time || typeof time !== "object") return time || null;
+      const copy = { ...time };
+      if (!Number.isFinite(copy.total)) {
+        if (Number.isFinite(copy.minute) && Number.isFinite(copy.second)) {
+          copy.total = copy.minute * 60 + copy.second;
+        } else if (typeof copy.label === "string") {
+          const parsed = parseTime(copy.label);
+          if (parsed) Object.assign(copy, parsed);
+        }
+      }
+      if (!copy.label && Number.isFinite(copy.total)) copy.label = fmt(copy.total);
+      return copy;
+    }
+
     function cloneEntry(entry) {
       return {
         ...entry,
-        time: entry.time ? { ...entry.time } : null,
+        time: normalizeTimeObject(entry.time),
       };
     }
 
@@ -1957,9 +1972,12 @@
         .map((trip, index) => {
           if (!trip.back) return null;
           if (!trip.start && !(trip.back.deductSeconds || 0)) return null;
+          const backTotal = entryTotal(trip.back);
+          const startTotal = entryTotal(trip.start);
+          if (!Number.isFinite(backTotal) || (trip.start && !Number.isFinite(startTotal))) return null;
           const seconds = trip.start
-            ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0)
-            : trip.back.time.total - (trip.back.deductSeconds || 0);
+            ? backTotal - startTotal - (trip.back.deductSeconds || 0)
+            : backTotal - (trip.back.deductSeconds || 0);
           return seconds >= 0 ? { index, seconds } : null;
         })
         .filter(Boolean);
@@ -1999,6 +2017,13 @@
       return `${sign}${Math.floor(abs / 60)}:${String(abs % 60).padStart(2, "0")}`;
     }
 
+    function entryTotal(entry) {
+      if (!entry?.time) return null;
+      if (Number.isFinite(entry.time.total)) return entry.time.total;
+      const normalized = normalizeTimeObject(entry.time);
+      return Number.isFinite(normalized?.total) ? normalized.total : null;
+    }
+
     function render() {
       const rows = grouped();
       el("summaryTable").innerHTML = `
@@ -2011,9 +2036,14 @@
         </thead>
         <tbody>
           ${rows.length ? rows.map(({ name, trips }) => {
-            const results = trips.map((trip) => trip.back
-              ? (!trip.start && !(trip.back.deductSeconds || 0) ? null : (trip.start ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0) : trip.back.time.total - (trip.back.deductSeconds || 0)))
-              : null);
+            const results = trips.map((trip) => {
+              if (!trip.back) return null;
+              if (!trip.start && !(trip.back.deductSeconds || 0)) return null;
+              const backTotal = entryTotal(trip.back);
+              const startTotal = entryTotal(trip.start);
+              if (!Number.isFinite(backTotal) || (trip.start && !Number.isFinite(startTotal))) return null;
+              return trip.start ? backTotal - startTotal - (trip.back.deductSeconds || 0) : backTotal - (trip.back.deductSeconds || 0);
+            });
             const valid = results.filter((v) => v !== null && v >= 0);
             const personalRanks = personalRankMap(results);
             const metrics = swimmerMetrics(trips);
@@ -2462,9 +2492,14 @@
       const rows = [headers];
       for (const { name, trips } of grouped(entries)) {
         const row = [name];
-        const results = trips.map((trip) => trip.back
-          ? (!trip.start && !(trip.back.deductSeconds || 0) ? null : (trip.start ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0) : trip.back.time.total - (trip.back.deductSeconds || 0)))
-          : null);
+        const results = trips.map((trip) => {
+          if (!trip.back) return null;
+          if (!trip.start && !(trip.back.deductSeconds || 0)) return null;
+          const backTotal = entryTotal(trip.back);
+          const startTotal = entryTotal(trip.start);
+          if (!Number.isFinite(backTotal) || (trip.start && !Number.isFinite(startTotal))) return null;
+          return trip.start ? backTotal - startTotal - (trip.back.deductSeconds || 0) : backTotal - (trip.back.deductSeconds || 0);
+        });
         const valid = results.filter((v) => v !== null && v >= 0);
         const personalRanks = personalRankMap(results);
         const metrics = swimmerMetrics(trips);
@@ -2492,9 +2527,12 @@
         const results = trips.map((trip) => {
           if (!trip.back) return null;
           if (!trip.start && !(trip.back.deductSeconds || 0)) return null;
+          const backTotal = entryTotal(trip.back);
+          const startTotal = entryTotal(trip.start);
+          if (!Number.isFinite(backTotal) || (trip.start && !Number.isFinite(startTotal))) return null;
           const seconds = trip.start
-            ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0)
-            : trip.back.time.total - (trip.back.deductSeconds || 0);
+            ? backTotal - startTotal - (trip.back.deductSeconds || 0)
+            : backTotal - (trip.back.deductSeconds || 0);
           return seconds >= 0 ? seconds : null;
         });
         const valid = results.filter((value) => value !== null);
@@ -2648,9 +2686,14 @@
     function summaryText() {
       return grouped().map(({ name, trips }) => {
         const parts = trips.map((trip, i) => {
-          const result = trip.back
-            ? (!trip.start && !(trip.back.deductSeconds || 0) ? null : (trip.start ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0) : trip.back.time.total - (trip.back.deductSeconds || 0)))
-            : null;
+          let result = null;
+          if (trip.back && (trip.start || (trip.back.deductSeconds || 0))) {
+            const backTotal = entryTotal(trip.back);
+            const startTotal = entryTotal(trip.start);
+            if (Number.isFinite(backTotal) && (!trip.start || Number.isFinite(startTotal))) {
+              result = trip.start ? backTotal - startTotal - (trip.back.deductSeconds || 0) : backTotal - (trip.back.deductSeconds || 0);
+            }
+          }
           return `第${i + 1}趟 ${trip.start ? trip.start.time.label : ""} / ${trip.back ? `${trip.back.time.label}${trip.back.deductSeconds ? `扣${trip.back.deductSeconds}秒` : ""}` : ""} / ${fmt(result)}`;
         });
         return `${name}\t${parts.join("\t")}`;
