@@ -3,22 +3,45 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>游泳口令整理器</title>
+  <title>游泳成績語音記錄系統</title>
   <style>
     :root {
-      --bg: #eef6f6;
+      --bg: #08131d;
       --panel: #ffffff;
-      --ink: #17343b;
-      --muted: #647780;
-      --line: #d7e4e7;
-      --accent: #176b75;
-      --accent-soft: #dff0f1;
-      --warn: #f2c94c;
+      --ink: #122b35;
+      --muted: #607580;
+      --line: #d8e3e7;
+      --accent: #0e6474;
+      --accent-soft: #dceff2;
+      --warn: #d8b45d;
       --bad: #b42318;
       --good: #137a4f;
+      --hero-dark: #02070d;
+      --hero-water: #04aeea;
+      --hero-light: rgba(142, 225, 255, .9);
+      --save: #0e6474;
+      --rank: #d8b45d;
+      --secondary-bg: #e7eef1;
     }
 
     * { box-sizing: border-box; }
+
+    body[data-theme="prestige"] {
+      --bg: #e9f4f2;
+      --panel: #fffdf7;
+      --ink: #123334;
+      --muted: #667c78;
+      --line: #d7e3dd;
+      --accent: #0f6b69;
+      --accent-soft: #dcefeb;
+      --warn: #d95f52;
+      --hero-dark: #062522;
+      --hero-water: #15b5c5;
+      --hero-light: rgba(171, 244, 236, .85);
+      --save: #c94f45;
+      --rank: #d8b45d;
+      --secondary-bg: #edf3ef;
+    }
 
     body {
       margin: 0;
@@ -28,25 +51,103 @@
     }
 
     header {
-      padding: 18px 20px;
-      background: var(--accent);
+      min-height: 230px;
+      padding: 22px 20px 18px;
+      background:
+        radial-gradient(circle at 12% 18%, rgba(255,255,255,.82) 0 1%, transparent 7%),
+        radial-gradient(circle at 88% 16%, rgba(255,255,255,.78) 0 1%, transparent 8%),
+        radial-gradient(circle at 50% 64%, var(--hero-light) 0 3%, transparent 34%),
+        linear-gradient(180deg, rgba(0,0,0,.82), rgba(0,0,0,.24) 46%, rgba(0,0,0,.86)),
+        linear-gradient(115deg, var(--hero-dark), #062f4c 48%, var(--hero-dark));
       color: #fff;
       display: flex;
-      align-items: center;
+      align-items: stretch;
       justify-content: space-between;
-      gap: 12px;
+      gap: 18px;
       flex-wrap: wrap;
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    header::before {
+      content: "";
+      position: absolute;
+      inset: 48% -8% -22%;
+      background:
+        radial-gradient(ellipse at 50% 0%, rgba(255,255,255,.95), transparent 7%),
+        repeating-linear-gradient(90deg, rgba(255,255,255,.2) 0 2px, transparent 2px 32px),
+        linear-gradient(180deg, rgba(0, 188, 236, .72), rgba(0, 43, 77, .16));
+      transform: skewY(-2deg);
+      filter: saturate(1.35);
+      z-index: -1;
+    }
+
+    header::after {
+      content: "";
+      position: absolute;
+      left: 10%;
+      right: 10%;
+      top: 49%;
+      height: 78px;
+      background:
+        radial-gradient(circle at 18% 54%, rgba(255,255,255,.95) 0 2px, transparent 3px),
+        radial-gradient(circle at 32% 34%, rgba(255,255,255,.75) 0 2px, transparent 4px),
+        radial-gradient(circle at 58% 44%, rgba(255,255,255,.9) 0 2px, transparent 4px),
+        radial-gradient(circle at 73% 30%, rgba(255,255,255,.68) 0 2px, transparent 5px),
+        linear-gradient(90deg, transparent, rgba(111,224,255,.8), transparent);
+      opacity: .72;
+      filter: blur(.2px);
+      z-index: -1;
+    }
+
+    .hero-copy {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      min-height: 190px;
+      max-width: 720px;
+    }
+
+    .theme-switch {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      z-index: 1;
+    }
+
+    .theme-switch button {
+      min-height: 36px;
+      padding: 8px 11px;
+      border: 1px solid rgba(255,255,255,.24);
+      background: rgba(255,255,255,.12);
+      color: #fff;
+      backdrop-filter: blur(10px);
+    }
+
+    .theme-switch button.active {
+      background: rgba(255,255,255,.88);
+      color: #0a2b34;
     }
 
     h1 {
       margin: 0;
-      font-size: 24px;
+      font-size: clamp(30px, 5vw, 54px);
       letter-spacing: 0;
+      line-height: 1.05;
+      font-weight: 950;
+      color: transparent;
+      background: linear-gradient(180deg, #ffffff 0%, #d7e2e7 34%, #8e9da6 50%, #ffffff 66%, #b8c2c8 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      text-shadow: 0 2px 20px rgba(80, 215, 255, .34), 0 1px 0 rgba(0,0,0,.55);
     }
 
-    header div:last-child {
+    .hero-subtitle {
+      margin-top: 9px;
       font-size: 14px;
       opacity: .9;
+      max-width: 560px;
     }
 
     main {
@@ -61,11 +162,12 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       overflow: hidden;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, .08);
     }
 
     .section-title {
       padding: 12px 14px;
-      background: #f7fbfb;
+      background: color-mix(in srgb, var(--accent-soft), #fff 55%);
       border-bottom: 1px solid var(--line);
       font-weight: 700;
     }
@@ -121,11 +223,11 @@
 
     button.secondary {
       color: var(--ink);
-      background: #e6eef0;
+      background: var(--secondary-bg);
     }
 
     button.warning {
-      color: #352700;
+      color: #2d250d;
       background: var(--warn);
     }
 
@@ -204,7 +306,7 @@
       font-size: 12px;
       font-weight: 800;
       color: #3b2a00;
-      background: var(--warn);
+      background: var(--rank);
       vertical-align: 1px;
     }
 
@@ -307,10 +409,19 @@
         position: sticky;
         top: 0;
         z-index: 5;
-        padding: 12px 14px;
+        min-height: 174px;
+        padding: 14px;
       }
-      h1 { font-size: 20px; }
-      header div:last-child { font-size: 12px; }
+      .hero-copy { min-height: 132px; }
+      h1 { font-size: 29px; }
+      .hero-subtitle { font-size: 12px; }
+      .theme-switch {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        justify-content: stretch;
+      }
+      .theme-switch button { font-size: 13px; padding: 8px 6px; }
       main {
         grid-template-columns: 1fr;
         gap: 10px;
@@ -345,8 +456,14 @@
 </head>
 <body>
   <header>
-    <h1>游泳口令整理器</h1>
-    <div>支援 000、005、110、205，多趟自動配對</div>
+    <div class="hero-copy">
+      <h1>游泳成績語音記錄系統</h1>
+      <div class="hero-subtitle">Voice timing, split records, personal rankings.</div>
+    </div>
+    <div class="theme-switch" aria-label="版面切換">
+      <button id="themeMidnightBtn" type="button">競技深色</button>
+      <button id="themePrestigeBtn" type="button">高級海洋</button>
+    </div>
   </header>
 
   <main>
@@ -406,7 +523,7 @@
           <label for="correctionBox">每行一組：聽錯=正確</label>
           <textarea id="correctionBox" style="min-height:150px;"></textarea>
           <div class="button-row">
-            <button class="saveSettingsControl">儲存到 Google Drive</button>
+            <button class="saveSettingsControl">儲存</button>
             <button class="downloadSettingsControl secondary">下載設定備份</button>
           </div>
           <p class="small">例：語音常把「林昱辰」聽成「林泳辰」，就填 `泳辰=昱辰`。整理時會先自動替換。</p>
@@ -434,7 +551,7 @@
 阿飛=陳奕飛
 玥棠=方玥棠</textarea>
           <div class="button-row">
-            <button class="saveSettingsControl">儲存到 Google Drive</button>
+            <button class="saveSettingsControl">儲存</button>
             <button class="downloadSettingsControl secondary">下載設定備份</button>
           </div>
           <p class="small">可以喊小名，例如「芮婕005出發」。結果會自動記到「方芮婕」。不要只填單一個字，兩個字以上會比較穩。</p>
@@ -466,7 +583,7 @@
             <button id="saveResultBtn">儲存本組成績</button>
             <button id="focusResultBtn" class="secondary">檢查整理表</button>
           </div>
-          <p class="small">確認整理表正確後，填日期和第幾組，再儲存到 Google Drive。相同日期會續寫，每組中間空 5 列。</p>
+          <p class="small">確認整理表正確後，填日期和第幾組，再按儲存。相同日期會續寫，每組中間空 5 列。</p>
           <div class="button-row">
             <button id="exportBtn">匯出 CSV</button>
             <button id="copyBtn" class="secondary">複製表格</button>
@@ -519,6 +636,14 @@
       box.className = `status ${type}`.trim();
     }
 
+    function applyTheme(theme) {
+      const nextTheme = theme === "prestige" ? "prestige" : "midnight";
+      document.body.dataset.theme = nextTheme;
+      try { localStorage.setItem("swimTimerTheme", nextTheme); } catch {}
+      el("themeMidnightBtn").classList.toggle("active", nextTheme === "midnight");
+      el("themePrestigeBtn").classList.toggle("active", nextTheme === "prestige");
+    }
+
     function settingsPayload() {
       return {
         roster: el("rosterBox")?.value || "",
@@ -536,7 +661,7 @@
     function saveSettingsLocal(showStatus = false) {
       try {
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsPayload()));
-        if (showStatus) setStatus("已先暫存在這台手機/瀏覽器，按「儲存到 Google Drive」可同步到雲端。", "good");
+        if (showStatus) setStatus("已先暫存在這台手機/瀏覽器，按「儲存」可同步到雲端。", "good");
         return true;
       } catch {
         if (showStatus) setStatus("暫存失敗：這個瀏覽器可能封鎖本機儲存。", "bad");
@@ -590,12 +715,12 @@
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload));
       } catch {}
 
-      setStatus("正在儲存到 Google Drive...", "good");
+      setStatus("正在儲存...", "good");
       try {
         await sheetSet(SETTINGS_KEY, JSON.stringify(payload));
-        setStatus("設定已儲存到 Google Drive，也同步留在這台手機/瀏覽器。", "good");
+        setStatus("設定已儲存，也同步留在這台手機/瀏覽器。", "good");
       } catch {
-        setStatus("Google Drive 儲存失敗，但已盡量保存在這台手機/瀏覽器。", "bad");
+        setStatus("雲端儲存失敗，但已盡量保存在這台手機/瀏覽器。", "bad");
       }
     }
 
@@ -613,7 +738,7 @@
       } catch {}
 
       if (localData && savedAtValue(localData) > savedAtValue(remoteData)) {
-        if (applySettings(localData)) setStatus("已載入這台手機較新的暫存設定。按「儲存到 Google Drive」可同步到雲端。", "good");
+        if (applySettings(localData)) setStatus("已載入這台手機較新的暫存設定。按「儲存」可同步到雲端。", "good");
         return;
       }
 
@@ -1194,6 +1319,8 @@
     });
 
     el("saveResultBtn").addEventListener("click", saveResultToDrive);
+    el("themeMidnightBtn").addEventListener("click", () => applyTheme("midnight"));
+    el("themePrestigeBtn").addEventListener("click", () => applyTheme("prestige"));
 
     function summaryRows() {
       const headers = ["姓名"];
@@ -1270,6 +1397,7 @@
       return rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
     }
 
+    applyTheme(localStorage.getItem("swimTimerTheme") || "midnight");
     if (!el("resultDate").value) el("resultDate").value = new Date().toISOString().slice(0, 10);
     if (!el("groupTitle").value) el("groupTitle").value = "第1組";
     render();
