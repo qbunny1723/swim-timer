@@ -343,7 +343,8 @@
     .manual-section { order: 3; grid-column: 1; }
     .save-section { order: 4; grid-column: 1; }
     .summary-section { order: 5; grid-column: 2; grid-row: 1 / span 4; }
-    .raw-section { order: 6; grid-column: 1 / -1; }
+    .snapshot-section { order: 6; grid-column: 1 / -1; }
+    .raw-section { order: 7; grid-column: 1 / -1; }
 
     section {
       background: var(--panel);
@@ -825,6 +826,83 @@
       margin-top: 8px;
     }
 
+    .snapshot-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .snapshot-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .snapshot-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+
+    .snapshot-card summary {
+      cursor: pointer;
+      padding: 10px 12px;
+      background: var(--accent-soft);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-weight: 850;
+    }
+
+    .snapshot-body {
+      padding: 12px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .snapshot-meta {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 180px;
+      gap: 10px;
+    }
+
+    .snapshot-lanes {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .snapshot-lane {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      background: var(--accent-soft);
+    }
+
+    .snapshot-lane textarea {
+      min-height: 68px;
+      font-size: 13px;
+    }
+
+    .assignment-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+    }
+
+    .assignment-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 76px;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      background: var(--panel);
+    }
+
     /* See detail row */
     .see-detail-row {
       text-align: center;
@@ -1017,6 +1095,7 @@
       .floating-settings,
       .manual-section,
       .save-section,
+      .snapshot-section,
       .summary-section,
       .raw-section {
         grid-column: auto;
@@ -1050,9 +1129,20 @@
       .save-row { grid-template-columns: 1fr 1fr; }
       .save-row #saveResultBtn { grid-column: 1 / -1; }
       .lane-grid { grid-template-columns: 1fr; }
+      .snapshot-actions { grid-template-columns: 1fr; }
+      .snapshot-meta { grid-template-columns: 1fr; }
+      .snapshot-lanes { grid-template-columns: 1fr; }
       .floating-settings { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
       .floating-panel summary { min-height: 40px; font-size: 12px; padding: 0 4px; }
       .floating-panel[open] { grid-column: 1 / -1; }
+      main {
+        width: 100vw;
+        max-width: 100vw;
+        margin: 0;
+        padding-left: 0;
+        padding-right: 0;
+      }
+      section { width: 100%; }
     }
   </style>
 </head>
@@ -1273,6 +1363,22 @@
       </div>
     </section>
 
+    <section class="snapshot-section">
+      <div class="section-title">
+        暫存紀錄
+        <span class="pb-badge">先暫存，最後一起上傳</span>
+      </div>
+      <div class="body">
+        <div class="snapshot-actions">
+          <button id="snapshotBtn">暫存本組並清空</button>
+          <button id="uploadSnapshotsBtn" class="btn-save-coral">全部上傳</button>
+          <button id="clearSnapshotsBtn" class="danger">清空暫存</button>
+        </div>
+        <div id="snapshotList" class="snapshot-list"></div>
+        <p class="small">每一組暫存後都可以點開，事後補 A/B/C/D 課表，並逐一標記學生這組游哪一個課表。</p>
+      </div>
+    </section>
+
     <section class="raw-section" style="grid-column:1 / -1;">
       <div class="section-title">原始紀錄與提醒</div>
       <div class="table-wrap raw-table">
@@ -1295,8 +1401,10 @@
     const API_URL = "https://script.google.com/macros/s/AKfycbzLKnWnLUhGO2nLKm5CCbqX3RfcOkKuDH6ymeVqefDOLiXpjCWSN5Vj5ksM5XkBT8K3Rg/exec"; // 新版游泳 Apps Script /exec 網址
     const SETTINGS_KEY = "swimTimerSettings";
     const LANE_PLAN_KEY = "swimTimerLanePlan";
+    const SNAPSHOT_KEY = "swimTimerSnapshots";
     const maxTrips = 6;
     const state = { entries: [], issues: [] };
+    let snapshots = [];
     let recognition = null;
     let listening = false;
     let autoSaveTimer = null;
@@ -1363,6 +1471,57 @@
           if (typeof data[id] === "string" && el(id)) el(id).value = data[id];
         });
       } catch {}
+    }
+
+    function cloneEntry(entry) {
+      return {
+        ...entry,
+        time: entry.time ? { ...entry.time } : null,
+      };
+    }
+
+    function normalizeSnapshot(snapshot, index = 0) {
+      const lanes = snapshot?.lanes || {};
+      return {
+        id: snapshot?.id || `${Date.now()}-${Math.random()}`,
+        title: snapshot?.title || `第${index + 1}組`,
+        date: snapshot?.date || new Date().toISOString().slice(0, 10),
+        commandText: snapshot?.commandText || "",
+        createdAt: snapshot?.createdAt || new Date().toISOString(),
+        entries: Array.isArray(snapshot?.entries) ? snapshot.entries.map(cloneEntry) : [],
+        issues: Array.isArray(snapshot?.issues) ? snapshot.issues : [],
+        lanes: {
+          A: { students: lanes.A?.students || "", workout: lanes.A?.workout || "" },
+          B: { students: lanes.B?.students || "", workout: lanes.B?.workout || "" },
+          C: { students: lanes.C?.students || "", workout: lanes.C?.workout || "" },
+          D: { students: lanes.D?.students || "", workout: lanes.D?.workout || "" },
+        },
+        assignments: snapshot?.assignments || {},
+      };
+    }
+
+    function saveSnapshotsLocal() {
+      try {
+        localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshots));
+      } catch {}
+    }
+
+    function loadSnapshotsLocal() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || "[]");
+        snapshots = Array.isArray(raw) ? raw.map(normalizeSnapshot) : [];
+      } catch {
+        snapshots = [];
+      }
+    }
+
+    function snapshotNames(snapshot) {
+      return grouped(snapshot.entries).map((item) => item.name);
+    }
+
+    function snapshotLabel(snapshot, index) {
+      const count = snapshotNames(snapshot).length;
+      return `${snapshot.title || `第${index + 1}組`} · ${count}人`;
     }
 
     function savedAtValue(data) {
@@ -1750,18 +1909,18 @@
       }
     }
 
-    function actionIndex(entry) {
-      return state.entries
+    function actionIndex(entry, entries = state.entries) {
+      return entries
         .filter((item) => item.name === entry.name && item.action === entry.action)
         .findIndex((item) => item.id === entry.id) + 1;
     }
 
-    function grouped() {
-      const names = [...new Set(state.entries.map((entry) => entry.name))];
+    function grouped(entries = state.entries) {
+      const names = [...new Set(entries.map((entry) => entry.name))];
       return names.map((name) => {
         const trips = Array.from({ length: maxTrips }, () => ({ start: null, back: null }));
-        for (const entry of state.entries.filter((item) => item.name === name)) {
-          const index = actionIndex(entry) - 1;
+        for (const entry of entries.filter((item) => item.name === name)) {
+          const index = actionIndex(entry, entries) - 1;
           if (index >= 0 && index < maxTrips) trips[index][entry.action === "出發" ? "start" : "back"] = entry;
         }
         return { name, trips };
@@ -1885,6 +2044,95 @@
       el("rawTable").innerHTML = `
         <thead><tr><th>#</th><th>姓名</th><th>動作</th><th>時間</th><th>第幾次</th><th>原始文字</th></tr></thead>
         <tbody>${rawRows || issueRows ? rawRows + issueRows : `<tr><td colspan="6">尚無紀錄。</td></tr>`}</tbody>`;
+    }
+
+    function renderSnapshotList() {
+      const list = el("snapshotList");
+      if (!list) return;
+      if (!snapshots.length) {
+        list.innerHTML = `<div class="status">尚無暫存。每記完一組，按「暫存本組並清空」。</div>`;
+        return;
+      }
+
+      list.innerHTML = snapshots.map((snapshot, index) => {
+        const names = snapshotNames(snapshot);
+        const assignmentRows = names.length ? names.map((name) => `
+          <div class="assignment-item">
+            <strong>${escapeHtml(name)}</strong>
+            <select data-snapshot-index="${index}" data-assign-name="${escapeHtml(name)}">
+              ${["未標記", "A", "B", "C", "D"].map((value) => `<option value="${value}" ${((snapshot.assignments || {})[name] || "未標記") === value ? "selected" : ""}>${value}</option>`).join("")}
+            </select>
+          </div>`).join("") : `<p class="small">這組沒有整理到學生。</p>`;
+
+        const laneEditors = ["A", "B", "C", "D"].map((lane) => `
+          <div class="snapshot-lane">
+            <div class="lane-title">${lane} 課表</div>
+            <label class="save-label">學生備註</label>
+            <textarea data-snapshot-index="${index}" data-lane="${lane}" data-lane-field="students" placeholder="這組 ${lane} 課表學生">${escapeHtml(snapshot.lanes[lane]?.students || "")}</textarea>
+            <label class="save-label" style="margin-top:8px;">課表內容</label>
+            <textarea data-snapshot-index="${index}" data-lane="${lane}" data-lane-field="workout" placeholder="例：100公尺 150含休 六趟">${escapeHtml(snapshot.lanes[lane]?.workout || "")}</textarea>
+          </div>`).join("");
+
+        return `
+          <details class="snapshot-card">
+            <summary><span>${escapeHtml(snapshotLabel(snapshot, index))}</span><span>${escapeHtml(snapshot.date || "")}</span></summary>
+            <div class="snapshot-body">
+              <div class="snapshot-meta">
+                <div class="save-field">
+                  <label class="save-label">組別標題</label>
+                  <input data-snapshot-index="${index}" data-snapshot-field="title" value="${escapeHtml(snapshot.title || "")}">
+                </div>
+                <div class="save-field">
+                  <label class="save-label">日期</label>
+                  <input type="date" data-snapshot-index="${index}" data-snapshot-field="date" value="${escapeHtml(snapshot.date || "")}">
+                </div>
+              </div>
+              <div class="snapshot-lanes">${laneEditors}</div>
+              <div>
+                <div class="save-label" style="margin-bottom:8px;">學生本組課表標記</div>
+                <div class="assignment-grid">${assignmentRows}</div>
+              </div>
+              <div class="button-row">
+                <button data-load-snapshot="${index}" class="secondary">載入這組</button>
+                <button data-delete-snapshot="${index}" class="danger">刪除這組</button>
+              </div>
+            </div>
+          </details>`;
+      }).join("");
+
+      list.querySelectorAll("[data-snapshot-field]").forEach((input) => {
+        input.addEventListener("input", () => {
+          const snapshot = snapshots[Number(input.dataset.snapshotIndex)];
+          if (!snapshot) return;
+          snapshot[input.dataset.snapshotField] = input.value;
+          saveSnapshotsLocal();
+        });
+      });
+      list.querySelectorAll("[data-lane][data-lane-field]").forEach((input) => {
+        input.addEventListener("input", () => {
+          const snapshot = snapshots[Number(input.dataset.snapshotIndex)];
+          if (!snapshot) return;
+          const lane = input.dataset.lane;
+          snapshot.lanes[lane] ||= { students: "", workout: "" };
+          snapshot.lanes[lane][input.dataset.laneField] = input.value;
+          saveSnapshotsLocal();
+        });
+      });
+      list.querySelectorAll("[data-assign-name]").forEach((select) => {
+        select.addEventListener("change", () => {
+          const snapshot = snapshots[Number(select.dataset.snapshotIndex)];
+          if (!snapshot) return;
+          snapshot.assignments ||= {};
+          snapshot.assignments[select.dataset.assignName] = select.value;
+          saveSnapshotsLocal();
+        });
+      });
+      list.querySelectorAll("[data-load-snapshot]").forEach((button) => {
+        button.addEventListener("click", () => loadSnapshot(Number(button.dataset.loadSnapshot)));
+      });
+      list.querySelectorAll("[data-delete-snapshot]").forEach((button) => {
+        button.addEventListener("click", () => deleteSnapshot(Number(button.dataset.deleteSnapshot)));
+      });
     }
 
     function escapeHtml(value) {
@@ -2057,6 +2305,9 @@
     });
 
     el("saveResultBtn").addEventListener("click", saveResultToDrive);
+    el("snapshotBtn").addEventListener("click", saveCurrentSnapshot);
+    el("uploadSnapshotsBtn").addEventListener("click", uploadSnapshotsToDrive);
+    el("clearSnapshotsBtn").addEventListener("click", clearSnapshots);
     el("settingsToggleBtn").addEventListener("click", () => {
       el("settingsPanel").hidden = !el("settingsPanel").hidden;
     });
@@ -2068,12 +2319,80 @@
       });
     });
 
-    function summaryRows() {
+    function saveCurrentSnapshot() {
+      if (!state.entries.length && el("commandBox").value.trim()) parseAll();
+      if (!state.entries.length) {
+        setStatus("目前沒有整理結果可以暫存。", "bad");
+        return;
+      }
+      const title = el("groupTitle").value.trim() || `第${snapshots.length + 1}組`;
+      const plan = lanePlanPayload();
+      const snapshot = normalizeSnapshot({
+        title,
+        date: el("resultDate").value || new Date().toISOString().slice(0, 10),
+        commandText: el("commandBox").value,
+        createdAt: new Date().toISOString(),
+        entries: state.entries.map(cloneEntry),
+        issues: state.issues.slice(),
+        lanes: {
+          A: { students: plan.laneAStudents, workout: plan.laneAWorkout },
+          B: { students: plan.laneBStudents, workout: plan.laneBWorkout },
+          C: { students: "", workout: "" },
+          D: { students: "", workout: "" },
+        },
+        assignments: {},
+      }, snapshots.length);
+      snapshots.push(snapshot);
+      saveSnapshotsLocal();
+      renderSnapshotList();
+      state.entries = [];
+      state.issues = [];
+      el("commandBox").value = "";
+      const charCount = el("charCount");
+      if (charCount) charCount.textContent = "0 / 300";
+      render();
+      setStatus(`已暫存 ${snapshot.title}，可以直接開始記錄下一組。`, "good");
+    }
+
+    function loadSnapshot(index) {
+      const snapshot = snapshots[index];
+      if (!snapshot) return;
+      state.entries = snapshot.entries.map(cloneEntry);
+      state.issues = snapshot.issues.slice();
+      el("commandBox").value = snapshot.commandText || "";
+      if (el("groupTitle")) el("groupTitle").value = snapshot.title || `第${index + 1}組`;
+      if (el("resultDate")) el("resultDate").value = snapshot.date || new Date().toISOString().slice(0, 10);
+      const charCount = el("charCount");
+      if (charCount) charCount.textContent = `${el("commandBox").value.length} / 300`;
+      render();
+      setStatus(`已載入 ${snapshot.title} 到整理表。`, "good");
+    }
+
+    function deleteSnapshot(index) {
+      const snapshot = snapshots[index];
+      if (!snapshot) return;
+      if (!confirm(`確定刪除暫存「${snapshot.title}」？`)) return;
+      snapshots.splice(index, 1);
+      saveSnapshotsLocal();
+      renderSnapshotList();
+      setStatus("已刪除暫存。", "good");
+    }
+
+    function clearSnapshots() {
+      if (!snapshots.length) return;
+      if (!confirm("確定清空所有暫存紀錄？")) return;
+      snapshots = [];
+      saveSnapshotsLocal();
+      renderSnapshotList();
+      setStatus("已清空所有暫存紀錄。", "good");
+    }
+
+    function summaryRows(entries = state.entries) {
       const headers = ["姓名"];
       for (let i = 1; i <= maxTrips; i++) headers.push(`第${i}趟出發`, `第${i}趟回來`, `第${i}趟成績`, `第${i}趟個人排名`);
       headers.push("完成趟數", "PB", "PB趟次", "最新", "進步秒數", "平均");
       const rows = [headers];
-      for (const { name, trips } of grouped()) {
+      for (const { name, trips } of grouped(entries)) {
         const row = [name];
         const results = trips.map((trip) => trip.back
           ? (!trip.start && !(trip.back.deductSeconds || 0) ? null : (trip.start ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0) : trip.back.time.total - (trip.back.deductSeconds || 0)))
@@ -2100,14 +2419,28 @@
       return rows;
     }
 
-    function resultRowsForSave() {
-      const lanePlan = lanePlanPayload();
+    function resultRowsForSave(snapshot = null) {
+      const lanePlan = snapshot ? null : lanePlanPayload();
+      const lanes = snapshot?.lanes || {
+        A: { students: lanePlan.laneAStudents, workout: lanePlan.laneAWorkout },
+        B: { students: lanePlan.laneBStudents, workout: lanePlan.laneBWorkout },
+        C: { students: "", workout: "" },
+        D: { students: "", workout: "" },
+      };
+      const assignments = snapshot?.assignments || {};
+      const assignmentRows = snapshot
+        ? [["學生", "本組課表"], ...snapshotNames(snapshot).map((name) => [name, assignments[name] || "未標記"])]
+        : [];
       return [
         ["水道", "學生", "課表"],
-        ["A水道", lanePlan.laneAStudents, lanePlan.laneAWorkout],
-        ["B水道", lanePlan.laneBStudents, lanePlan.laneBWorkout],
+        ["A水道", lanes.A?.students || "", lanes.A?.workout || ""],
+        ["B水道", lanes.B?.students || "", lanes.B?.workout || ""],
+        ["C水道", lanes.C?.students || "", lanes.C?.workout || ""],
+        ["D水道", lanes.D?.students || "", lanes.D?.workout || ""],
         [],
-        ...summaryRows(),
+        ...assignmentRows,
+        ...(assignmentRows.length ? [[]] : []),
+        ...summaryRows(snapshot?.entries || state.entries),
       ];
     }
 
@@ -2138,6 +2471,29 @@
       }
     }
 
+    async function uploadSnapshotsToDrive() {
+      if (!snapshots.length) {
+        setStatus("目前沒有暫存紀錄可以上傳。", "bad");
+        return;
+      }
+      const fallbackDate = el("resultDate").value || new Date().toISOString().slice(0, 10);
+      setStatus(`正在上傳 ${snapshots.length} 組暫存紀錄...`, "good");
+      try {
+        for (const snapshot of snapshots) {
+          const result = await sheetAction({
+            action: "saveResult",
+            date: snapshot.date || fallbackDate,
+            title: snapshot.title || "未命名組別",
+            rows: resultRowsForSave(snapshot),
+          });
+          if (!result || !result.ok) throw new Error("save failed");
+        }
+        setStatus(`已上傳 ${snapshots.length} 組暫存紀錄。`, "good");
+      } catch {
+        setStatus("暫存上傳失敗：請確認網路與 Apps Script 權限。", "bad");
+      }
+    }
+
     function summaryText() {
       return grouped().map(({ name, trips }) => {
         const parts = trips.map((trip, i) => {
@@ -2157,9 +2513,11 @@
 
     applyTheme(localStorage.getItem("swimTimerTheme") || "splash");
     loadLanePlanLocal();
+    loadSnapshotsLocal();
     if (!el("resultDate").value) el("resultDate").value = new Date().toISOString().slice(0, 10);
     if (!el("groupTitle").value) el("groupTitle").value = "第1組";
     render();
+    renderSnapshotList();
     loadSettings();
   </script>
 </body>
