@@ -2193,7 +2193,7 @@
       return ["A", "B", "C", "D"].map((lane) => {
         const names = snapshotNamesForLane(snapshot, lane);
         if (!names.length && !(snapshot.lanes[lane]?.workout || "").trim()) return "";
-        const rows = summaryRows(entriesForNames(snapshot.entries, names));
+        const rows = finalSummaryRows(entriesForNames(snapshot.entries, names));
         return `
           <div class="snapshot-preview-group">
             <div class="snapshot-preview-title">${lane} 組</div>
@@ -2487,6 +2487,52 @@
       return rows;
     }
 
+    function tripResults(entries) {
+      return grouped(entries).map(({ name, trips }) => {
+        const results = trips.map((trip) => {
+          if (!trip.back) return null;
+          if (!trip.start && !(trip.back.deductSeconds || 0)) return null;
+          const seconds = trip.start
+            ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0)
+            : trip.back.time.total - (trip.back.deductSeconds || 0);
+          return seconds >= 0 ? seconds : null;
+        });
+        const valid = results.filter((value) => value !== null);
+        const metrics = swimmerMetrics(trips);
+        const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "";
+        return { name, results, valid, metrics, avg };
+      });
+    }
+
+    function finalSummaryRows(entries = state.entries) {
+      const swimmers = tripResults(entries);
+      const visibleTrips = Math.max(0, ...swimmers.map((swimmer) => {
+        let last = 0;
+        swimmer.results.forEach((result, index) => {
+          if (result !== null) last = index + 1;
+        });
+        return last;
+      }));
+      const headers = ["姓名"];
+      for (let i = 1; i <= visibleTrips; i++) headers.push(`第${i}趟成績`);
+      headers.push("完成", "PB", "PB趟次", "最新", "進步", "平均");
+      const rows = [headers];
+      swimmers.forEach(({ name, results, valid, metrics, avg }) => {
+        const row = [name];
+        for (let i = 0; i < visibleTrips; i++) row.push(fmt(results[i]));
+        row.push(
+          valid.length,
+          fmt(metrics.pb),
+          metrics.bestTrip,
+          fmt(metrics.latest),
+          metrics.improvement === "" ? "" : `${metrics.improvement}秒`,
+          fmt(avg)
+        );
+        rows.push(row);
+      });
+      return rows;
+    }
+
     function resultRowsForSave(snapshot = null) {
       if (snapshot) return groupedSnapshotRowsForSave(snapshot);
       const lanePlan = snapshot ? null : lanePlanPayload();
@@ -2531,13 +2577,13 @@
         if (!names.length && !(snapshot.lanes[lane]?.workout || "").trim()) return;
         rows.push([`${lane}組`, "課表內容", snapshot.lanes[lane]?.workout || ""]);
         rows.push(["學生", names.join("、")]);
-        rows.push(...summaryRows(entriesForNames(snapshot.entries, names)));
+        rows.push(...finalSummaryRows(entriesForNames(snapshot.entries, names)));
         rows.push([]);
       });
       rows.push(["未標記學生"]);
       const unassigned = snapshotNames(snapshot).filter((name) => !["A", "B", "C", "D"].includes((snapshot.assignments || {})[name]));
       rows.push(["學生", unassigned.join("、")]);
-      if (unassigned.length) rows.push(...summaryRows(entriesForNames(snapshot.entries, unassigned)));
+      if (unassigned.length) rows.push(...finalSummaryRows(entriesForNames(snapshot.entries, unassigned)));
       return rows;
     }
 
