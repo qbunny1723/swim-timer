@@ -2067,9 +2067,7 @@
         const laneEditors = ["A", "B", "C", "D"].map((lane) => `
           <div class="snapshot-lane">
             <div class="lane-title">${lane} 課表</div>
-            <label class="save-label">學生備註</label>
-            <textarea data-snapshot-index="${index}" data-lane="${lane}" data-lane-field="students" placeholder="這組 ${lane} 課表學生">${escapeHtml(snapshot.lanes[lane]?.students || "")}</textarea>
-            <label class="save-label" style="margin-top:8px;">課表內容</label>
+            <label class="save-label">課表內容</label>
             <textarea data-snapshot-index="${index}" data-lane="${lane}" data-lane-field="workout" placeholder="例：100公尺 150含休 六趟">${escapeHtml(snapshot.lanes[lane]?.workout || "")}</textarea>
           </div>`).join("");
 
@@ -2428,15 +2426,23 @@
         D: { students: "", workout: "" },
       };
       const assignments = snapshot?.assignments || {};
+      const studentsByLane = {};
+      if (snapshot) {
+        ["A", "B", "C", "D"].forEach((lane) => {
+          studentsByLane[lane] = snapshotNames(snapshot)
+            .filter((name) => assignments[name] === lane)
+            .join("、");
+        });
+      }
       const assignmentRows = snapshot
         ? [["學生", "本組課表"], ...snapshotNames(snapshot).map((name) => [name, assignments[name] || "未標記"])]
         : [];
       return [
         ["水道", "學生", "課表"],
-        ["A水道", lanes.A?.students || "", lanes.A?.workout || ""],
-        ["B水道", lanes.B?.students || "", lanes.B?.workout || ""],
-        ["C水道", lanes.C?.students || "", lanes.C?.workout || ""],
-        ["D水道", lanes.D?.students || "", lanes.D?.workout || ""],
+        ["A水道", studentsByLane.A || lanes.A?.students || "", lanes.A?.workout || ""],
+        ["B水道", studentsByLane.B || lanes.B?.students || "", lanes.B?.workout || ""],
+        ["C水道", studentsByLane.C || lanes.C?.students || "", lanes.C?.workout || ""],
+        ["D水道", studentsByLane.D || lanes.D?.students || "", lanes.D?.workout || ""],
         [],
         ...assignmentRows,
         ...(assignmentRows.length ? [[]] : []),
