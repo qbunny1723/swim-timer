@@ -2576,13 +2576,11 @@
         const names = snapshotNamesForLane(snapshot, lane);
         if (!names.length && !(snapshot.lanes[lane]?.workout || "").trim()) return;
         rows.push([`${lane}組`, "課表內容", snapshot.lanes[lane]?.workout || ""]);
-        rows.push(["學生", names.join("、")]);
         rows.push(...finalSummaryRows(entriesForNames(snapshot.entries, names)));
         rows.push([]);
       });
       rows.push(["未標記學生"]);
       const unassigned = snapshotNames(snapshot).filter((name) => !["A", "B", "C", "D"].includes((snapshot.assignments || {})[name]));
-      rows.push(["學生", unassigned.join("、")]);
       if (unassigned.length) rows.push(...finalSummaryRows(entriesForNames(snapshot.entries, unassigned)));
       return rows;
     }
