@@ -746,17 +746,16 @@
 
     /* Extra button row (collapsible small buttons) */
     .extra-btns {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
       margin-top: 6px;
     }
 
     .extra-btns button {
-      flex: 1 1 auto;
-      min-height: 36px;
-      font-size: 12px;
-      padding: 7px 10px;
+      min-height: 42px;
+      font-size: 13px;
+      padding: 9px 10px;
     }
 
     /* Save row layout */
@@ -1062,9 +1061,7 @@
           <div id="status" class="status">可以用手機/電腦鍵盤的語音輸入一直講，最後按整理。Chrome/Edge 可試用「開始語音」。</div>
           <div class="extra-btns">
             <button id="clearTextBtn" class="secondary">清空文字</button>
-            <button id="fullscreenBtn" class="secondary">全螢幕</button>
             <button id="focusInputBtn" class="secondary">繼續輸入</button>
-            <button id="demoBtn" class="secondary">放入範例</button>
           </div>
         </div>
       </section>
@@ -1879,7 +1876,7 @@
       if (event.target === el("detailDialog")) el("detailDialog").classList.remove("show");
     });
 
-    el("fullscreenBtn").addEventListener("click", async () => {
+    el("fullscreenBtn")?.addEventListener("click", async () => {
       try {
         if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
         else await document.exitFullscreen();
@@ -1928,7 +1925,7 @@
       el("summaryTable").scrollIntoView({ behavior: "smooth", block: "start" });
     });
 
-    el("demoBtn").addEventListener("click", () => {
+    el("demoBtn")?.addEventListener("click", () => {
       el("commandBox").value = "林立誠000出發，方瑞傑005出發，盧冠宇010出發，林立誠110回來，盧冠宇200回來，方瑞傑130回來，林立誠230出發，林立誠340回來，請整理";
       parseAll();
     });
