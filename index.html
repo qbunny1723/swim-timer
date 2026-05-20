@@ -903,6 +903,31 @@
       background: var(--panel);
     }
 
+    .snapshot-preview {
+      display: grid;
+      gap: 12px;
+    }
+
+    .snapshot-preview-group {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--panel);
+    }
+
+    .snapshot-preview-title {
+      padding: 9px 11px;
+      background: var(--accent-soft);
+      font-weight: 850;
+    }
+
+    .snapshot-preview-workout {
+      padding: 8px 11px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      line-height: 1.5;
+    }
+
     /* See detail row */
     .see-detail-row {
       text-align: center;
@@ -2070,6 +2095,7 @@
             <label class="save-label">課表內容</label>
             <textarea data-snapshot-index="${index}" data-lane="${lane}" data-lane-field="workout" placeholder="例：100公尺 150含休 六趟">${escapeHtml(snapshot.lanes[lane]?.workout || "")}</textarea>
           </div>`).join("");
+        const groupedPreview = renderSnapshotGroupedPreview(snapshot);
 
         return `
           <details class="snapshot-card">
@@ -2085,10 +2111,18 @@
                   <input type="date" data-snapshot-index="${index}" data-snapshot-field="date" value="${escapeHtml(snapshot.date || "")}">
                 </div>
               </div>
+              <div class="save-field">
+                <label class="save-label">原始語音輸入文字</label>
+                <textarea readonly>${escapeHtml(snapshot.commandText || "")}</textarea>
+              </div>
               <div class="snapshot-lanes">${laneEditors}</div>
               <div>
                 <div class="save-label" style="margin-bottom:8px;">學生本組課表標記</div>
                 <div class="assignment-grid">${assignmentRows}</div>
+              </div>
+              <div>
+                <div class="save-label" style="margin-bottom:8px;">依課表分組整理表</div>
+                <div class="snapshot-preview">${groupedPreview}</div>
               </div>
               <div class="button-row">
                 <button data-load-snapshot="${index}" class="secondary">載入這組</button>
@@ -2131,6 +2165,42 @@
       list.querySelectorAll("[data-delete-snapshot]").forEach((button) => {
         button.addEventListener("click", () => deleteSnapshot(Number(button.dataset.deleteSnapshot)));
       });
+    }
+
+    function entriesForNames(entries, names) {
+      const set = new Set(names);
+      return entries.filter((entry) => set.has(entry.name));
+    }
+
+    function snapshotNamesForLane(snapshot, lane) {
+      const assignments = snapshot?.assignments || {};
+      return snapshotNames(snapshot).filter((name) => assignments[name] === lane);
+    }
+
+    function tableHtmlFromRows(rows) {
+      if (!rows.length) return "";
+      const [headers, ...bodyRows] = rows;
+      return `
+        <div class="table-wrap">
+          <table>
+            <thead><tr>${headers.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead>
+            <tbody>${bodyRows.length ? bodyRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${headers.length}">尚無學生。</td></tr>`}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function renderSnapshotGroupedPreview(snapshot) {
+      return ["A", "B", "C", "D"].map((lane) => {
+        const names = snapshotNamesForLane(snapshot, lane);
+        if (!names.length && !(snapshot.lanes[lane]?.workout || "").trim()) return "";
+        const rows = summaryRows(entriesForNames(snapshot.entries, names));
+        return `
+          <div class="snapshot-preview-group">
+            <div class="snapshot-preview-title">${lane} 組</div>
+            <div class="snapshot-preview-workout">${escapeHtml(snapshot.lanes[lane]?.workout || "尚未填課表內容")}</div>
+            ${tableHtmlFromRows(rows)}
+          </div>`;
+      }).join("") || `<div class="status">選擇學生本組課表後，這裡會依 A/B/C/D 分組顯示整理表。</div>`;
     }
 
     function escapeHtml(value) {
@@ -2418,6 +2488,7 @@
     }
 
     function resultRowsForSave(snapshot = null) {
+      if (snapshot) return groupedSnapshotRowsForSave(snapshot);
       const lanePlan = snapshot ? null : lanePlanPayload();
       const lanes = snapshot?.lanes || {
         A: { students: lanePlan.laneAStudents, workout: lanePlan.laneAWorkout },
@@ -2448,6 +2519,26 @@
         ...(assignmentRows.length ? [[]] : []),
         ...summaryRows(snapshot?.entries || state.entries),
       ];
+    }
+
+    function groupedSnapshotRowsForSave(snapshot) {
+      const rows = [];
+      rows.push(["原始語音輸入文字"]);
+      rows.push([snapshot.commandText || ""]);
+      rows.push([]);
+      ["A", "B", "C", "D"].forEach((lane) => {
+        const names = snapshotNamesForLane(snapshot, lane);
+        if (!names.length && !(snapshot.lanes[lane]?.workout || "").trim()) return;
+        rows.push([`${lane}組`, "課表內容", snapshot.lanes[lane]?.workout || ""]);
+        rows.push(["學生", names.join("、")]);
+        rows.push(...summaryRows(entriesForNames(snapshot.entries, names)));
+        rows.push([]);
+      });
+      rows.push(["未標記學生"]);
+      const unassigned = snapshotNames(snapshot).filter((name) => !["A", "B", "C", "D"].includes((snapshot.assignments || {})[name]));
+      rows.push(["學生", unassigned.join("、")]);
+      if (unassigned.length) rows.push(...summaryRows(entriesForNames(snapshot.entries, unassigned)));
+      return rows;
     }
 
     async function saveResultToDrive() {
