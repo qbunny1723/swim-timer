@@ -828,7 +828,7 @@
 
     .snapshot-actions {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 8px;
       margin-bottom: 10px;
     }
@@ -1398,6 +1398,7 @@
           <button id="snapshotBtn">暫存本組並清空</button>
           <button id="uploadSnapshotsBtn" class="btn-save-coral">全部上傳</button>
           <button id="uploadSummaryBtn" class="secondary">上傳整理總表</button>
+          <button id="coachExcelBtn" class="secondary">下載教練Excel</button>
           <button id="clearSnapshotsBtn" class="danger">清空暫存</button>
         </div>
         <div id="snapshotList" class="snapshot-list"></div>
@@ -2417,6 +2418,7 @@
     el("snapshotBtn").addEventListener("click", saveCurrentSnapshot);
     el("uploadSnapshotsBtn").addEventListener("click", uploadSnapshotsToDrive);
     el("uploadSummaryBtn").addEventListener("click", uploadSnapshotSummaryToDrive);
+    el("coachExcelBtn").addEventListener("click", downloadCoachExcel);
     el("clearSnapshotsBtn").addEventListener("click", clearSnapshots);
     el("settingsToggleBtn").addEventListener("click", () => {
       el("settingsPanel").hidden = !el("settingsPanel").hidden;
@@ -2653,6 +2655,17 @@
       return rows;
     }
 
+    function dailySummaryRows(fallbackDate) {
+      const rows = [];
+      for (const snapshot of snapshots) {
+        const summaryRows = snapshotSummaryOnlyRows(snapshot);
+        if (!summaryRows.length) continue;
+        rows.push([snapshot.date || fallbackDate, snapshot.title || "未命名組別"]);
+        rows.push(...summaryRows, [], []);
+      }
+      return rows;
+    }
+
     async function saveResultToDrive() {
       const date = el("resultDate").value;
       const title = el("groupTitle").value.trim();
@@ -2712,13 +2725,7 @@
       const totalSheetName = `${fallbackDate}總表`;
       setStatus(`正在上傳整理總表到 ${totalSheetName}...`, "good");
       try {
-        const allRows = [];
-        for (const snapshot of snapshots) {
-          const rows = snapshotSummaryOnlyRows(snapshot);
-          if (!rows.length) continue;
-          allRows.push([snapshot.date || fallbackDate, snapshot.title || "未命名組別"]);
-          allRows.push(...rows, [], []);
-        }
+        const allRows = dailySummaryRows(fallbackDate);
         if (!allRows.length) throw new Error("empty summary");
         const result = await sheetAction({
           action: "saveResult",
@@ -2733,6 +2740,41 @@
       } catch {
         setStatus("整理總表上傳失敗：請確認 Apps Script 已更新並重新部署。", "bad");
       }
+    }
+
+    function downloadCoachExcel() {
+      if (!snapshots.length) {
+        setStatus("目前沒有暫存紀錄可以下載教練 Excel。", "bad");
+        return;
+      }
+      const fallbackDate = el("resultDate").value || new Date().toISOString().slice(0, 10);
+      const rows = dailySummaryRows(fallbackDate);
+      if (!rows.length) {
+        setStatus("請先在暫存紀錄中標記 A/B/C/D 課表，才有總表可下載。", "bad");
+        return;
+      }
+      const title = `${fallbackDate} 整理總表`;
+      const excelRows = [[title, new Date().toLocaleString("zh-TW")], ...rows];
+      const htmlRows = excelRows.map((row, rowIndex) => {
+        const cells = row.map((cell) => {
+          const tag = rowIndex === 0 || row[0] === "姓名" || String(row[0] || "").endsWith("組") ? "th" : "td";
+          return `<${tag}>${escapeHtml(cell)}</${tag}>`;
+        }).join("");
+        return `<tr>${cells}</tr>`;
+      }).join("");
+      const html = `<!doctype html><html><head><meta charset="utf-8">
+        <style>
+          table { border-collapse: collapse; font-family: "Microsoft JhengHei", Arial, sans-serif; }
+          th, td { border: 1px solid #d9d9d9; padding: 6px 9px; white-space: nowrap; }
+          th { background: #f3f6f8; font-weight: 700; }
+        </style></head><body><table>${htmlRows}</table></body></html>`;
+      const blob = new Blob(["\uFEFF", html], { type: "application/vnd.ms-excel;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `${fallbackDate}_游泳整理總表.xls`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      setStatus(`已下載 ${fallbackDate}_游泳整理總表.xls。`, "good");
     }
 
     function summaryText() {
