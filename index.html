@@ -2219,18 +2219,28 @@
         </div>`;
     }
 
-    function renderSnapshotGroupedPreview(snapshot) {
+    function snapshotFinalGroups(snapshot) {
       return ["A", "B", "C", "D"].map((lane) => {
         const names = snapshotNamesForLane(snapshot, lane);
-        if (!names.length && !(snapshot.lanes[lane]?.workout || "").trim()) return "";
-        const rows = finalSummaryRows(entriesForNames(snapshot.entries, names));
-        return `
+        const workout = snapshot.lanes[lane]?.workout || "";
+        if (!names.length && !workout.trim()) return null;
+        return {
+          lane,
+          workout,
+          rows: finalSummaryRows(entriesForNames(snapshot.entries, names)),
+        };
+      }).filter(Boolean);
+    }
+
+    function renderSnapshotGroupedPreview(snapshot) {
+      const groups = snapshotFinalGroups(snapshot);
+      if (!groups.length) return `<div class="status">選擇學生本組課表後，這裡會依 A/B/C/D 分組顯示整理表。</div>`;
+      return groups.map(({ lane, workout, rows }) => `
           <div class="snapshot-preview-group">
             <div class="snapshot-preview-title">${lane} 組</div>
-            <div class="snapshot-preview-workout">${escapeHtml(snapshot.lanes[lane]?.workout || "尚未填課表內容")}</div>
+            <div class="snapshot-preview-workout">${escapeHtml(workout || "尚未填課表內容")}</div>
             ${tableHtmlFromRows(rows)}
-          </div>`;
-      }).join("") || `<div class="status">選擇學生本組課表後，這裡會依 A/B/C/D 分組顯示整理表。</div>`;
+          </div>`).join("");
     }
 
     function escapeHtml(value) {
@@ -2582,7 +2592,7 @@
     }
 
     function resultRowsForSave(snapshot = null) {
-      if (snapshot) return groupedSnapshotRowsForSave(snapshot);
+      if (snapshot) return snapshotFinalRows(snapshot);
       const lanePlan = snapshot ? null : lanePlanPayload();
       const lanes = snapshot?.lanes || {
         A: { students: lanePlan.laneAStudents, workout: lanePlan.laneAWorkout },
@@ -2615,16 +2625,14 @@
       ];
     }
 
-    function groupedSnapshotRowsForSave(snapshot) {
+    function snapshotFinalRows(snapshot) {
       const rows = [];
       rows.push(["原始語音輸入文字"]);
       rows.push([snapshot.commandText || ""]);
       rows.push([]);
-      ["A", "B", "C", "D"].forEach((lane) => {
-        const names = snapshotNamesForLane(snapshot, lane);
-        if (!names.length && !(snapshot.lanes[lane]?.workout || "").trim()) return;
-        rows.push([`${lane}組`, "課表內容", snapshot.lanes[lane]?.workout || ""]);
-        rows.push(...enforceNameColumn(finalSummaryRows(entriesForNames(snapshot.entries, names))));
+      snapshotFinalGroups(snapshot).forEach(({ lane, workout, rows: tableRows }) => {
+        rows.push([`${lane}組`, "課表內容", workout || ""]);
+        rows.push(...enforceNameColumn(tableRows));
         rows.push([]);
       });
       rows.push(["未標記學生"]);
@@ -2666,14 +2674,16 @@
         return;
       }
       const fallbackDate = el("resultDate").value || new Date().toISOString().slice(0, 10);
+      const totalSheetName = `${fallbackDate}總表`;
       setStatus(`正在上傳 ${snapshots.length} 組暫存紀錄...`, "good");
       try {
         for (const snapshot of snapshots) {
           const result = await sheetAction({
             action: "saveResult",
             date: snapshot.date || fallbackDate,
+            sheetName: totalSheetName,
             title: snapshot.title || "未命名組別",
-            rows: resultRowsForSave(snapshot),
+            rows: snapshotFinalRows(snapshot),
           });
           if (!result || !result.ok) throw new Error("save failed");
         }
