@@ -2686,14 +2686,12 @@
         return;
       }
       const fallbackDate = el("resultDate").value || new Date().toISOString().slice(0, 10);
-      const totalSheetName = `${fallbackDate}總表`;
       setStatus(`正在上傳 ${snapshots.length} 組暫存紀錄...`, "good");
       try {
         for (const snapshot of snapshots) {
           const result = await sheetAction({
             action: "saveResult",
             date: snapshot.date || fallbackDate,
-            sheetName: totalSheetName,
             title: snapshot.title || "未命名組別",
             rows: snapshotFinalRows(snapshot),
           });
@@ -2721,7 +2719,7 @@
             action: "saveResult",
             date: snapshot.date || fallbackDate,
             sheetName: totalSheetName,
-            title: snapshot.title || "未命名組別",
+            title: `${snapshot.date || fallbackDate} ${snapshot.title || "未命名組別"}`,
             rows,
           });
           if (!result || !result.ok) throw new Error("save failed");
