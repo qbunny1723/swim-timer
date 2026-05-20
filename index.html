@@ -761,16 +761,17 @@
 
     /* Save row layout */
     .save-row {
-      display: flex;
-      gap: 8px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+      gap: 10px;
       align-items: flex-end;
     }
 
     .save-field {
-      flex: 1;
       display: flex;
       flex-direction: column;
       gap: 4px;
+      min-width: 0;
     }
 
     .save-label {
@@ -789,6 +790,39 @@
       font: inherit;
       background: var(--panel);
       color: var(--ink);
+    }
+
+    .lane-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .lane-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: var(--accent-soft);
+    }
+
+    .lane-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-weight: 850;
+      color: var(--ink);
+    }
+
+    .lane-card textarea {
+      min-height: 76px;
+      resize: vertical;
+    }
+
+    .lane-card .save-field + .save-field {
+      margin-top: 8px;
     }
 
     /* See detail row */
@@ -1013,6 +1047,9 @@
         font-size: 13px;
       }
       .grid-4 { grid-template-columns: 1fr 1fr; }
+      .save-row { grid-template-columns: 1fr 1fr; }
+      .save-row #saveResultBtn { grid-column: 1 / -1; }
+      .lane-grid { grid-template-columns: 1fr; }
       .floating-settings { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
       .floating-panel summary { min-height: 40px; font-size: 12px; padding: 0 4px; }
       .floating-panel[open] { grid-column: 1 / -1; }
@@ -1188,6 +1225,30 @@
             </div>
             <button id="saveResultBtn" class="btn-save-coral">💾 儲存</button>
           </div>
+          <div class="lane-grid">
+            <div class="lane-card">
+              <div class="lane-title">A 水道</div>
+              <div class="save-field">
+                <label class="save-label">學生</label>
+                <textarea id="laneAStudents" class="save-input" placeholder="例：林育丞、方芮婕、盧冠羽"></textarea>
+              </div>
+              <div class="save-field">
+                <label class="save-label">課表</label>
+                <textarea id="laneAWorkout" class="save-input" placeholder="例：100x6 150秒含休息"></textarea>
+              </div>
+            </div>
+            <div class="lane-card">
+              <div class="lane-title">B 水道</div>
+              <div class="save-field">
+                <label class="save-label">學生</label>
+                <textarea id="laneBStudents" class="save-input" placeholder="例：黃柏豪、陳唯恩、方玥棠"></textarea>
+              </div>
+              <div class="save-field">
+                <label class="save-label">課表</label>
+                <textarea id="laneBWorkout" class="save-input" placeholder="例：50x8 75秒含休息"></textarea>
+              </div>
+            </div>
+          </div>
           <p class="small" style="display:flex;align-items:center;gap:5px;margin-top:8px;">🔒 儲存後可隨時開啟編輯與查看歷史紀錄</p>
           <div class="button-row" style="margin-top:8px;">
             <button id="exportBtn" class="secondary">匯出 CSV</button>
@@ -1233,6 +1294,7 @@
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbzLKnWnLUhGO2nLKm5CCbqX3RfcOkKuDH6ymeVqefDOLiXpjCWSN5Vj5ksM5XkBT8K3Rg/exec"; // 新版游泳 Apps Script /exec 網址
     const SETTINGS_KEY = "swimTimerSettings";
+    const LANE_PLAN_KEY = "swimTimerLanePlan";
     const maxTrips = 6;
     const state = { entries: [], issues: [] };
     let recognition = null;
@@ -1277,6 +1339,30 @@
         aliases: el("aliasBox")?.value || "",
         savedAt: new Date().toISOString(),
       };
+    }
+
+    function lanePlanPayload() {
+      return {
+        laneAStudents: el("laneAStudents")?.value || "",
+        laneAWorkout: el("laneAWorkout")?.value || "",
+        laneBStudents: el("laneBStudents")?.value || "",
+        laneBWorkout: el("laneBWorkout")?.value || "",
+      };
+    }
+
+    function saveLanePlanLocal() {
+      try {
+        localStorage.setItem(LANE_PLAN_KEY, JSON.stringify(lanePlanPayload()));
+      } catch {}
+    }
+
+    function loadLanePlanLocal() {
+      try {
+        const data = JSON.parse(localStorage.getItem(LANE_PLAN_KEY) || "{}");
+        ["laneAStudents", "laneAWorkout", "laneBStudents", "laneBWorkout"].forEach((id) => {
+          if (typeof data[id] === "string" && el(id)) el(id).value = data[id];
+        });
+      } catch {}
     }
 
     function savedAtValue(data) {
@@ -1879,6 +1965,10 @@
       el(id).addEventListener("input", queueSettingsAutosave);
       el(id).addEventListener("change", () => saveSettingsLocal(false));
     });
+    ["laneAStudents", "laneAWorkout", "laneBStudents", "laneBWorkout"].forEach((id) => {
+      el(id)?.addEventListener("input", saveLanePlanLocal);
+      el(id)?.addEventListener("change", saveLanePlanLocal);
+    });
 
     el("closeDetailBtn").addEventListener("click", () => {
       el("detailDialog").classList.remove("show");
@@ -2010,10 +2100,21 @@
       return rows;
     }
 
+    function resultRowsForSave() {
+      const lanePlan = lanePlanPayload();
+      return [
+        ["水道", "學生", "課表"],
+        ["A水道", lanePlan.laneAStudents, lanePlan.laneAWorkout],
+        ["B水道", lanePlan.laneBStudents, lanePlan.laneBWorkout],
+        [],
+        ...summaryRows(),
+      ];
+    }
+
     async function saveResultToDrive() {
       const date = el("resultDate").value;
       const title = el("groupTitle").value.trim();
-      const rows = summaryRows();
+      const summary = summaryRows();
       if (!date) {
         setStatus("請先選擇日期。", "bad");
         return;
@@ -2022,13 +2123,14 @@
         setStatus("請先輸入組別標題，例如：第1組。", "bad");
         return;
       }
-      if (rows.length <= 1) {
+      if (summary.length <= 1) {
         setStatus("目前沒有整理表資料可以儲存。", "bad");
         return;
       }
+      saveLanePlanLocal();
       setStatus("正在儲存本組成績...", "good");
       try {
-        const result = await sheetAction({ action: "saveResult", date, title, rows });
+        const result = await sheetAction({ action: "saveResult", date, title, rows: resultRowsForSave() });
         if (result && result.ok) setStatus(`已儲存到 ${date} 分頁：${title}`, "good");
         else setStatus("儲存失敗：Apps Script 尚未支援本組成績寫入，請先部署新版 Apps Script。", "bad");
       } catch {
@@ -2054,6 +2156,7 @@
     }
 
     applyTheme(localStorage.getItem("swimTimerTheme") || "splash");
+    loadLanePlanLocal();
     if (!el("resultDate").value) el("resultDate").value = new Date().toISOString().slice(0, 10);
     if (!el("groupTitle").value) el("groupTitle").value = "第1組";
     render();
