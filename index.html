@@ -2712,18 +2712,23 @@
       const totalSheetName = `${fallbackDate}總表`;
       setStatus(`正在上傳整理總表到 ${totalSheetName}...`, "good");
       try {
+        const allRows = [];
         for (const snapshot of snapshots) {
           const rows = snapshotSummaryOnlyRows(snapshot);
           if (!rows.length) continue;
-          const result = await sheetAction({
-            action: "saveResult",
-            date: snapshot.date || fallbackDate,
-            sheetName: totalSheetName,
-            title: `${snapshot.date || fallbackDate} ${snapshot.title || "未命名組別"}`,
-            rows,
-          });
-          if (!result || !result.ok) throw new Error("save failed");
+          allRows.push([snapshot.date || fallbackDate, snapshot.title || "未命名組別"]);
+          allRows.push(...rows, [], []);
         }
+        if (!allRows.length) throw new Error("empty summary");
+        const result = await sheetAction({
+          action: "saveResult",
+          date: fallbackDate,
+          sheetName: totalSheetName,
+          overwrite: true,
+          title: `${fallbackDate} 整理總表`,
+          rows: allRows,
+        });
+        if (!result || !result.ok) throw new Error("save failed");
         setStatus(`已上傳整理總表到 ${totalSheetName}。`, "good");
       } catch {
         setStatus("整理總表上傳失敗：請確認 Apps Script 已更新並重新部署。", "bad");
