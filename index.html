@@ -828,7 +828,7 @@
 
     .snapshot-actions {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 8px;
       margin-bottom: 10px;
     }
@@ -1397,6 +1397,7 @@
         <div class="snapshot-actions">
           <button id="snapshotBtn">暫存本組並清空</button>
           <button id="uploadSnapshotsBtn" class="btn-save-coral">全部上傳</button>
+          <button id="uploadSummaryBtn" class="secondary">上傳整理總表</button>
           <button id="clearSnapshotsBtn" class="danger">清空暫存</button>
         </div>
         <div id="snapshotList" class="snapshot-list"></div>
@@ -2415,6 +2416,7 @@
     el("saveResultBtn").addEventListener("click", saveResultToDrive);
     el("snapshotBtn").addEventListener("click", saveCurrentSnapshot);
     el("uploadSnapshotsBtn").addEventListener("click", uploadSnapshotsToDrive);
+    el("uploadSummaryBtn").addEventListener("click", uploadSnapshotSummaryToDrive);
     el("clearSnapshotsBtn").addEventListener("click", clearSnapshots);
     el("settingsToggleBtn").addEventListener("click", () => {
       el("settingsPanel").hidden = !el("settingsPanel").hidden;
@@ -2641,6 +2643,16 @@
       return rows;
     }
 
+    function snapshotSummaryOnlyRows(snapshot) {
+      const rows = [];
+      snapshotFinalGroups(snapshot).forEach(({ lane, workout, rows: tableRows }) => {
+        rows.push([`${lane}組`, "課表內容", workout || ""]);
+        rows.push(...enforceNameColumn(tableRows));
+        rows.push([]);
+      });
+      return rows;
+    }
+
     async function saveResultToDrive() {
       const date = el("resultDate").value;
       const title = el("groupTitle").value.trim();
@@ -2690,6 +2702,33 @@
         setStatus(`已上傳 ${snapshots.length} 組暫存紀錄。`, "good");
       } catch {
         setStatus("暫存上傳失敗：請確認網路與 Apps Script 權限。", "bad");
+      }
+    }
+
+    async function uploadSnapshotSummaryToDrive() {
+      if (!snapshots.length) {
+        setStatus("目前沒有暫存紀錄可以上傳總表。", "bad");
+        return;
+      }
+      const fallbackDate = el("resultDate").value || new Date().toISOString().slice(0, 10);
+      const totalSheetName = `${fallbackDate}總表`;
+      setStatus(`正在上傳整理總表到 ${totalSheetName}...`, "good");
+      try {
+        for (const snapshot of snapshots) {
+          const rows = snapshotSummaryOnlyRows(snapshot);
+          if (!rows.length) continue;
+          const result = await sheetAction({
+            action: "saveResult",
+            date: snapshot.date || fallbackDate,
+            sheetName: totalSheetName,
+            title: snapshot.title || "未命名組別",
+            rows,
+          });
+          if (!result || !result.ok) throw new Error("save failed");
+        }
+        setStatus(`已上傳整理總表到 ${totalSheetName}。`, "good");
+      } catch {
+        setStatus("整理總表上傳失敗：請確認 Apps Script 已更新並重新部署。", "bad");
       }
     }
 
