@@ -460,6 +460,13 @@
       <section style="margin-top:16px;">
         <div class="section-title">資料操作</div>
         <div class="body">
+          <div class="grid-4">
+            <input id="groupTitle" placeholder="組別標題，例如：第1組">
+            <input id="resultDate" type="date">
+            <button id="saveResultBtn">儲存本組成績</button>
+            <button id="focusResultBtn" class="secondary">檢查整理表</button>
+          </div>
+          <p class="small">確認整理表正確後，填日期和第幾組，再儲存到 Google Drive。相同日期會續寫，每組中間空 5 列。</p>
           <div class="button-row">
             <button id="exportBtn">匯出 CSV</button>
             <button id="copyBtn" class="secondary">複製表格</button>
@@ -558,6 +565,15 @@
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify({ key, value }),
       });
+    }
+
+    async function sheetAction(payload) {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify(payload),
+      });
+      return res.json().catch(() => ({}));
     }
 
     function applySettings(data) {
@@ -665,9 +681,21 @@
     }
 
     function nameTokens() {
-      const tokens = rosterNames().map((name) => ({ token: name, name }));
+      const tokens = [];
+      const seen = new Set();
+      const addToken = (token, name) => {
+        if (!token || token.length < 2) return;
+        const key = `${token}=>${name}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        tokens.push({ token, name });
+      };
+      rosterNames().forEach((name) => {
+        addToken(name, name);
+        if (name.length >= 3) addToken(name.slice(-2), name);
+      });
       for (const { alias, name } of aliasEntries()) {
-        if (alias.length >= 2) tokens.push({ token: alias, name });
+        addToken(alias, name);
       }
       return tokens.sort((a, b) => b.token.length - a.token.length);
     }
@@ -1161,6 +1189,70 @@
       URL.revokeObjectURL(a.href);
     });
 
+    el("focusResultBtn").addEventListener("click", () => {
+      el("summaryTable").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    el("saveResultBtn").addEventListener("click", saveResultToDrive);
+
+    function summaryRows() {
+      const headers = ["姓名"];
+      for (let i = 1; i <= maxTrips; i++) headers.push(`第${i}趟出發`, `第${i}趟回來`, `第${i}趟成績`, `第${i}趟個人排名`);
+      headers.push("完成趟數", "PB", "PB趟次", "最新", "進步秒數", "平均");
+      const rows = [headers];
+      for (const { name, trips } of grouped()) {
+        const row = [name];
+        const results = trips.map((trip) => trip.back
+          ? (!trip.start && !(trip.back.deductSeconds || 0) ? null : (trip.start ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0) : trip.back.time.total - (trip.back.deductSeconds || 0)))
+          : null);
+        const valid = results.filter((v) => v !== null && v >= 0);
+        const personalRanks = personalRankMap(results);
+        const metrics = swimmerMetrics(trips);
+        trips.forEach((trip, i) => row.push(
+          trip.start?.time.label || "",
+          trip.back ? `${trip.back.time.label}${trip.back.deductSeconds ? ` 扣${trip.back.deductSeconds}秒` : ""}` : "",
+          fmt(results[i]),
+          personalRanks.get(i) ? `#${personalRanks.get(i)}` : ""
+        ));
+        row.push(
+          valid.length,
+          fmt(metrics.pb),
+          metrics.bestTrip,
+          fmt(metrics.latest),
+          metrics.improvement === "" ? "" : metrics.improvement,
+          fmt(valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "")
+        );
+        rows.push(row);
+      }
+      return rows;
+    }
+
+    async function saveResultToDrive() {
+      const date = el("resultDate").value;
+      const title = el("groupTitle").value.trim();
+      const rows = summaryRows();
+      if (!date) {
+        setStatus("請先選擇日期。", "bad");
+        return;
+      }
+      if (!title) {
+        setStatus("請先輸入組別標題，例如：第1組。", "bad");
+        return;
+      }
+      if (rows.length <= 1) {
+        setStatus("目前沒有整理表資料可以儲存。", "bad");
+        return;
+      }
+      setStatus("正在儲存本組成績到 Google Drive...", "good");
+      try {
+        const result = await sheetAction({ action: "saveResult", date, title, rows });
+        if (result && result.ok) setStatus(`已儲存到 ${date} 分頁：${title}`, "good");
+        else setStatus("儲存失敗：Apps Script 尚未支援本組成績寫入，請先部署新版 Apps Script。", "bad");
+      } catch {
+        setStatus("儲存失敗：請確認已部署新版游泳 Apps Script，且 API_URL 已換成新的 /exec。", "bad");
+      }
+    }
+
     function summaryText() {
       return grouped().map(({ name, trips }) => {
         const parts = trips.map((trip, i) => {
@@ -1174,31 +1266,12 @@
     }
 
     function summaryCsv() {
-      const headers = ["姓名"];
-      for (let i = 1; i <= maxTrips; i++) headers.push(`第${i}趟出發`, `第${i}趟回來`, `第${i}趟成績`);
-      headers.push("完成趟數", "PB", "PB趟次", "最新", "進步秒數", "平均");
-      const rows = [headers];
-      for (const { name, trips } of grouped()) {
-        const row = [name];
-        const results = trips.map((trip) => trip.back
-          ? (!trip.start && !(trip.back.deductSeconds || 0) ? null : (trip.start ? trip.back.time.total - trip.start.time.total - (trip.back.deductSeconds || 0) : trip.back.time.total - (trip.back.deductSeconds || 0)))
-          : null);
-        const valid = results.filter((v) => v !== null && v >= 0);
-        const metrics = swimmerMetrics(trips);
-        trips.forEach((trip, i) => row.push(trip.start?.time.label || "", trip.back ? `${trip.back.time.label}${trip.back.deductSeconds ? ` 扣${trip.back.deductSeconds}秒` : ""}` : "", fmt(results[i])));
-        row.push(
-          valid.length,
-          fmt(metrics.pb),
-          metrics.bestTrip,
-          fmt(metrics.latest),
-          metrics.improvement === "" ? "" : metrics.improvement,
-          fmt(valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "")
-        );
-        rows.push(row);
-      }
+      const rows = summaryRows();
       return rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
     }
 
+    if (!el("resultDate").value) el("resultDate").value = new Date().toISOString().slice(0, 10);
+    if (!el("groupTitle").value) el("groupTitle").value = "第1組";
     render();
     loadSettings();
   </script>
