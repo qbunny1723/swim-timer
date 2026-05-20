@@ -2533,6 +2533,16 @@
       return rows;
     }
 
+    function enforceNameColumn(rows) {
+      if (!Array.isArray(rows) || !rows.length) return [["姓名"]];
+      const fixed = rows.map((row) => Array.isArray(row) ? row.slice() : [row]);
+      if (fixed[0][0] !== "姓名") fixed[0].unshift("姓名");
+      for (let i = 1; i < fixed.length; i++) {
+        if (!fixed[i].length) fixed[i].unshift("");
+      }
+      return fixed;
+    }
+
     function resultRowsForSave(snapshot = null) {
       if (snapshot) return groupedSnapshotRowsForSave(snapshot);
       const lanePlan = snapshot ? null : lanePlanPayload();
@@ -2576,12 +2586,12 @@
         const names = snapshotNamesForLane(snapshot, lane);
         if (!names.length && !(snapshot.lanes[lane]?.workout || "").trim()) return;
         rows.push([`${lane}組`, "課表內容", snapshot.lanes[lane]?.workout || ""]);
-        rows.push(...finalSummaryRows(entriesForNames(snapshot.entries, names)));
+        rows.push(...enforceNameColumn(finalSummaryRows(entriesForNames(snapshot.entries, names))));
         rows.push([]);
       });
       rows.push(["未標記學生"]);
       const unassigned = snapshotNames(snapshot).filter((name) => !["A", "B", "C", "D"].includes((snapshot.assignments || {})[name]));
-      if (unassigned.length) rows.push(...finalSummaryRows(entriesForNames(snapshot.entries, unassigned)));
+      if (unassigned.length) rows.push(...enforceNameColumn(finalSummaryRows(entriesForNames(snapshot.entries, unassigned))));
       return rows;
     }
 
