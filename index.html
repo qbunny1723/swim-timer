@@ -27,10 +27,14 @@
       --btn-voice-color: #fff;
       --btn-parse-bg: #ffd93d;
       --btn-parse-color: #7a5200;
-      --btn-stop-bg: #a8edea;
-      --btn-stop-color: #1a6b68;
+      --btn-stop-bg: #e05050;
+      --btn-stop-color: #fff;
       --btn-clear-bg: #ffe0b2;
       --btn-clear-color: #7a4800;
+      --btn-focus-bg: #a8edea;
+      --btn-focus-color: #1a6b68;
+      --btn-example-bg: #4dc8f0;
+      --btn-example-color: #083848;
       --header-grad: linear-gradient(160deg,#4dc8f0,#7be6a0,#4dc8f0);
       --header-text: #1a4a2e;
       --header-sub: #2d7a50;
@@ -73,10 +77,14 @@
       --btn-voice-color: #fff;
       --btn-parse-bg: #5a7ab0;
       --btn-parse-color: #fff;
-      --btn-stop-bg: #e8dff0;
-      --btn-stop-color: #9a88b0;
+      --btn-stop-bg: #c05a80;
+      --btn-stop-color: #fff;
       --btn-clear-bg: #e8dff0;
       --btn-clear-color: #9a88b0;
+      --btn-focus-bg: #d5eaf5;
+      --btn-focus-color: #4c6380;
+      --btn-example-bg: #f3d5e3;
+      --btn-example-color: #7a4f66;
       --header-grad: linear-gradient(160deg,#e8d5f5,#d5eaf5,#e8d5f5);
       --header-text: #3d2a5a;
       --header-sub: #7a5a9a;
@@ -114,10 +122,14 @@
       --btn-voice-color: #001a22;
       --btn-parse-bg: #0a60ff;
       --btn-parse-color: #fff;
-      --btn-stop-bg: #162038;
-      --btn-stop-color: #4a6880;
+      --btn-stop-bg: #ff5050;
+      --btn-stop-color: #fff;
       --btn-clear-bg: #162038;
       --btn-clear-color: #4a6880;
+      --btn-focus-bg: #1c3550;
+      --btn-focus-color: #b9e6ff;
+      --btn-example-bg: #008fb0;
+      --btn-example-color: #e8fbff;
       --header-grad: linear-gradient(160deg,#060d1a,#0c1630,#060d1a);
       --header-text: #ffffff;
       --header-sub: #6a9acc;
@@ -155,10 +167,14 @@
       --btn-voice-color: #fff8e0;
       --btn-parse-bg: #182038;
       --btn-parse-color: #e89820;
-      --btn-stop-bg: #101828;
-      --btn-stop-color: #506078;
+      --btn-stop-bg: #e05050;
+      --btn-stop-color: #fff;
       --btn-clear-bg: #101828;
       --btn-clear-color: #506078;
+      --btn-focus-bg: #7a4a18;
+      --btn-focus-color: #fff0d0;
+      --btn-example-bg: #e89820;
+      --btn-example-color: #1a1000;
       --header-grad: linear-gradient(160deg,#070a14,#0e1428,#070a14);
       --header-text: #f0c870;
       --header-sub: #806830;
@@ -196,10 +212,14 @@
       --btn-voice-color: #fff;
       --btn-parse-bg: #a78bfa;
       --btn-parse-color: #fff;
-      --btn-stop-bg: #6ee7b7;
-      --btn-stop-color: #065f46;
+      --btn-stop-bg: #e05050;
+      --btn-stop-color: #fff;
       --btn-clear-bg: #fde68a;
       --btn-clear-color: #78350f;
+      --btn-focus-bg: #6ee7b7;
+      --btn-focus-color: #065f46;
+      --btn-example-bg: #b3d9ff;
+      --btn-example-color: #1e3a5f;
       --header-grad: linear-gradient(135deg,#ffb3d1,#ffcba4,#fff4a3,#b3f0d1,#b3d9ff,#d4b3ff);
       --header-text: #5a1a4a;
       --header-sub: #a04080;
@@ -702,7 +722,7 @@
     /* 3-button action row */
     .button-row-3 {
       display: grid;
-      grid-template-columns: 1.3fr 1fr 1fr;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
       margin-bottom: 8px;
     }
@@ -787,6 +807,16 @@
     .btn-parse {
       background: var(--btn-parse-bg) !important;
       color: var(--btn-parse-color) !important;
+    }
+
+    .btn-focus-input {
+      background: var(--btn-focus-bg) !important;
+      color: var(--btn-focus-color) !important;
+    }
+
+    .btn-example {
+      background: var(--btn-example-bg) !important;
+      color: var(--btn-example-color) !important;
     }
 
     .btn-save-main {
@@ -1321,12 +1351,12 @@
           <div class="button-row-3">
             <button id="listenBtn" class="btn-voice">開始語音</button>
             <button id="parseBtn" class="btn-parse">✦ 整理</button>
-            <button id="stopBtn" class="btn-stop-theme" disabled>⬛ 停止</button>
+            <button id="stopBtn" class="btn-stop-theme" disabled>🟥 停止</button>
           </div>
           <div class="extra-btns">
             <button id="clearTextBtn" class="secondary">清空文字</button>
-            <button id="focusInputBtn" class="secondary">繼續輸入</button>
-            <button id="loadExampleBtn" class="secondary">載入範例</button>
+            <button id="focusInputBtn" class="btn-focus-input">繼續輸入</button>
+            <button id="loadExampleBtn" class="btn-example">載入範例</button>
           </div>
           <div id="status" class="status">可以用手機/電腦鍵盤的語音輸入一直講，最後按整理。Chrome/Edge 可試用「開始語音」。</div>
         </div>
