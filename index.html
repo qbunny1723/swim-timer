@@ -1166,11 +1166,33 @@
       text-align: center;
     }
 
+    body[data-theme="splash"] header {
+      background-image:
+        linear-gradient(90deg, rgba(255, 255, 255, .88) 0%, rgba(255, 255, 255, .58) 38%, rgba(255, 255, 255, .08) 70%),
+        url("assets/hero-swimmer-splash.png");
+      background-size: cover, cover;
+      background-position: center, center right;
+      background-repeat: no-repeat, no-repeat;
+    }
+
+    body[data-theme="mist"] header {
+      background-image:
+        linear-gradient(90deg, rgba(255, 255, 255, .9) 0%, rgba(255, 255, 255, .62) 40%, rgba(255, 255, 255, .08) 72%),
+        url("assets/hero-swimmer-mist.png");
+      background-size: cover, cover;
+      background-position: center, center right;
+      background-repeat: no-repeat, no-repeat;
+    }
+
     /* Bunny header fun */
     body[data-theme="bunny"] header {
-      background: linear-gradient(135deg,#ffb3d1,#ffcba4,#fff4a3,#b3f0d1,#b3d9ff,#d4b3ff,#ffb3d1) !important;
-      background-size: 300% 300% !important;
-      animation: bunnyRainbow 6s ease infinite !important;
+      background-image:
+        linear-gradient(90deg, rgba(255, 255, 255, .9) 0%, rgba(255, 255, 255, .62) 38%, rgba(255, 255, 255, .06) 70%),
+        url("assets/hero-swimmer-bunny.png") !important;
+      background-size: cover, cover !important;
+      background-position: center, center right !important;
+      background-repeat: no-repeat, no-repeat !important;
+      animation: none !important;
     }
 
     @keyframes bunnyRainbow {
@@ -1549,6 +1571,15 @@
       .hero-subtitle { font-size: 17px; }
       body[data-theme="ice"] header {
         background-position: center, 58% center;
+      }
+      body[data-theme="splash"] header {
+        background-position: center, 64% center;
+      }
+      body[data-theme="bunny"] header {
+        background-position: center, 63% center !important;
+      }
+      body[data-theme="mist"] header {
+        background-position: center, 64% center;
       }
       .settings-menu { top: 10px; right: 10px; }
       .settings-menu { right: auto; left: 300px; }
