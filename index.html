@@ -2405,6 +2405,13 @@
       correctionBox.removeAttribute("style");
       rosterBox.placeholder = "林育丞=大學長,林育成\n方芮婕=方瑞傑\n盧冠羽=羽哥\n陳唯恩";
 
+      correctionBox.placeholder = "林育丞=育成,育承,玉成,育辰,育誠\n方芮婕=瑞傑,瑞潔,芮傑,瑞婕\n盧冠羽=如冠宇,冠宇,冠瑜";
+      const correctionPanel = card.querySelector('[data-student-panel="correction"]');
+      const correctionLabel = correctionPanel?.querySelector('label[for="correctionBox"]');
+      const correctionNote = correctionPanel?.querySelector(".small");
+      if (correctionLabel) correctionLabel.textContent = "每行一位學生：正確姓名=聽錯1,聽錯2";
+      if (correctionNote) correctionNote.textContent = "例：林育丞=育成,育承,玉成。整理前會先把右邊聽錯字改成左邊正確姓名。";
+
       card.querySelector("#saveSettingsBtnNew")?.addEventListener("click", saveSettings);
       card.querySelectorAll(".saveSettingsControl").forEach((button) => button.addEventListener("click", saveSettings));
       card.querySelectorAll(".downloadSettingsControl").forEach((button) => button.addEventListener("click", downloadSettings));
@@ -2560,11 +2567,14 @@
         .split(/\n+/)
         .map((line) => line.trim())
         .filter((line) => line && line.includes("="))
-        .map((line) => {
-          const [wrong, right] = line.split("=").map((part) => part.trim()).filter(Boolean);
-          return wrong && right ? { wrong, right } : null;
-        })
-        .filter(Boolean);
+        .flatMap((line) => {
+          const eqIndex = line.indexOf("=");
+          const right = line.slice(0, eqIndex).trim();
+          const wrongs = splitAliasList(line.slice(eqIndex + 1));
+          return wrongs
+            .filter((wrong) => wrong && wrong !== right)
+            .map((wrong) => ({ wrong, right }));
+        });
     }
 
     function applyCorrections(text) {
