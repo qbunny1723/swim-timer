@@ -785,6 +785,12 @@
       gap: 8px;
     }
 
+    .mix-item-control {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 74px;
+      gap: 6px;
+    }
+
     .mix-inline {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -1584,8 +1590,13 @@
       .save-row #saveResultBtn { grid-column: 1 / -1; }
       .lane-grid { grid-template-columns: 1fr; }
       .snapshot-actions { grid-template-columns: 1fr; }
-      .mix-top-row,
-      .mix-row { grid-template-columns: 1fr; }
+      .mix-top-row { grid-template-columns: 1fr; }
+      .mix-row { grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr) minmax(0, .85fr); gap: 6px; }
+      .mix-item-control { grid-template-columns: minmax(0, 1fr) 58px; gap: 4px; }
+      .mix-row label { font-size: 13px; }
+      .mix-row input,
+      .mix-row select { padding: 8px 7px; font-size: 13px; }
+      .mix-suffix { font-size: 12px; }
       .snapshot-meta { grid-template-columns: 1fr; }
       .snapshot-lanes { grid-template-columns: 1fr; }
       .floating-settings { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
@@ -2792,7 +2803,18 @@
         <div class="mix-row">
           <div>
             <label for="mixItem${index}">項目${mixed ? ` ${index + 1}` : ""}</label>
-            <input id="mixItem${index}" type="text" list="commonEventOptions" placeholder="例：100自">
+            <div class="mix-item-control">
+              <input id="mixItem${index}" type="text" placeholder="例：100自">
+              <select data-mix-item-select="${index}" aria-label="常用項目">
+                <option value="">選</option>
+                <option value="100自">100自</option>
+                <option value="200自">200自</option>
+                <option value="75自">75自</option>
+                <option value="50自">50自</option>
+                <option value="200混">200混</option>
+                <option value="custom">自訂</option>
+              </select>
+            </div>
           </div>
           <div>
             <label for="mixTime${index}">時間</label>
@@ -2810,6 +2832,13 @@
           </div>
         </div>
       `).join("");
+      el("mixRows").querySelectorAll("[data-mix-item-select]").forEach((select) => {
+        select.addEventListener("change", () => {
+          if (!select.value || select.value === "custom") return;
+          const input = el(`mixItem${select.dataset.mixItemSelect}`);
+          if (input) input.value = select.value;
+        });
+      });
     }
     ["mixedNo", "mixedYes", "mixCount"].forEach((id) => el(id).addEventListener("input", renderMixRows));
     ["laneAStudents", "laneAWorkout", "laneBStudents", "laneBWorkout"].forEach((id) => {
