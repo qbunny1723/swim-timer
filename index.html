@@ -1995,10 +1995,15 @@
     }
 
     function settingsPayload() {
+      const studentRows = studentAliasRows();
+      const roster = studentRows.map((row) => row.name).join("\n");
+      const aliases = studentRows
+        .flatMap((row) => row.aliases.map((alias) => `${alias}=${row.name}`))
+        .join("\n");
       return {
-        roster: el("rosterBox")?.value || "",
+        roster,
         corrections: el("correctionBox")?.value || "",
-        aliases: el("aliasBox")?.value || "",
+        aliases,
         savedAt: new Date().toISOString(),
       };
     }
@@ -2098,6 +2103,80 @@
       return Number.isFinite(time) ? time : 0;
     }
 
+    function parseAliasSource(source) {
+      return String(source || "")
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter((line) => line && line.includes("="))
+        .map((line) => {
+          const [alias, name] = line.split("=").map((part) => part.trim()).filter(Boolean);
+          return alias && name ? { alias, name } : null;
+        })
+        .filter(Boolean);
+    }
+
+    function splitAliasList(source) {
+      return String(source || "")
+        .split(/[,\uFF0C\u3001]+/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    function studentAliasRows(source = el("rosterBox")?.value || "") {
+      const seenNames = new Set();
+      return String(source || "")
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const eqIndex = line.indexOf("=");
+          const name = (eqIndex >= 0 ? line.slice(0, eqIndex) : line).trim();
+          const aliases = eqIndex >= 0 ? splitAliasList(line.slice(eqIndex + 1)) : [];
+          return name ? { name, aliases: aliases.filter((alias) => alias !== name) } : null;
+        })
+        .filter((row) => {
+          if (!row || seenNames.has(row.name)) return false;
+          seenNames.add(row.name);
+          return true;
+        });
+    }
+
+    function buildStudentAliasText(roster, aliases) {
+      const rows = String(roster || "")
+        .split(/\n+/)
+        .map((name) => name.trim())
+        .filter(Boolean)
+        .map((name) => ({ name, aliases: [] }));
+      const byName = new Map(rows.map((row) => [row.name, row]));
+      for (const { alias, name } of parseAliasSource(aliases)) {
+        if (!byName.has(name)) {
+          const row = { name, aliases: [] };
+          rows.push(row);
+          byName.set(name, row);
+        }
+        const row = byName.get(name);
+        if (alias !== name && !row.aliases.includes(alias)) row.aliases.push(alias);
+      }
+      return rows.map((row) => row.aliases.length ? `${row.name}=${row.aliases.join(",")}` : row.name).join("\n");
+    }
+
+    function setupStudentAliasUi() {
+      const rosterPanel = el("rosterBox")?.closest("details");
+      const aliasPanel = el("aliasBox")?.closest("details");
+      if (rosterPanel) {
+        const summary = rosterPanel.querySelector("summary");
+        const label = rosterPanel.querySelector("label");
+        const note = rosterPanel.querySelector(".small");
+        if (summary) summary.textContent = "學生與小名";
+        if (label) label.textContent = "每行一位學生：正式姓名=小名1,小名2";
+        if (note) note.textContent = "例：林育丞=大學長,林育成。只叫名字後兩字會自動支援，不用重複填。";
+      }
+      if (aliasPanel) aliasPanel.hidden = true;
+      if (el("rosterBox")) {
+        el("rosterBox").placeholder = "林育丞=大學長,林育成\n方芮婕=方瑞傑\n盧冠羽=羽哥";
+      }
+    }
+
     function saveSettingsLocal(showStatus = false) {
       try {
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsPayload()));
@@ -2149,7 +2228,9 @@
 
     function applySettings(data) {
       if (!data || typeof data !== "object") return false;
-      if (typeof data.roster === "string") el("rosterBox").value = data.roster;
+      if (typeof data.roster === "string") {
+        el("rosterBox").value = buildStudentAliasText(data.roster, data.aliases || "");
+      }
       if (typeof data.corrections === "string") el("correctionBox").value = data.corrections;
       if (typeof data.aliases === "string") el("aliasBox").value = data.aliases;
       return true;
@@ -2231,24 +2312,22 @@
     }
 
     function rosterNames() {
-      return (el("rosterBox")?.value || "")
-        .split(/\n+/)
-        .map((name) => name.trim())
-        .filter(Boolean)
+      return studentAliasRows()
+        .map((row) => row.name)
         .sort((a, b) => b.length - a.length);
     }
 
     function aliasEntries() {
-      const source = el("aliasBox")?.value || "";
-      return source
-        .split(/\n+/)
-        .map((line) => line.trim())
-        .filter((line) => line && line.includes("="))
-        .map((line) => {
-          const [alias, name] = line.split("=").map((part) => part.trim()).filter(Boolean);
-          return alias && name ? { alias, name } : null;
-        })
-        .filter(Boolean);
+      const merged = studentAliasRows()
+        .flatMap((row) => row.aliases.map((alias) => ({ alias, name: row.name })));
+      const legacy = parseAliasSource(el("aliasBox")?.value || "");
+      const seen = new Set();
+      return [...merged, ...legacy].filter((item) => {
+        const key = `${item.alias}=>${item.name}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     }
 
     function nameTokens() {
@@ -3386,6 +3465,7 @@
     }
 
     applyTheme(localStorage.getItem("swimTimerTheme") || "splash");
+    setupStudentAliasUi();
     loadLanePlanLocal();
     loadSnapshotsLocal();
     if (!el("resultDate").value) el("resultDate").value = new Date().toISOString().slice(0, 10);
