@@ -758,6 +758,20 @@
       gap: 8px;
     }
 
+    .mix-inline {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mix-suffix {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
     .btn-voice {
       background: var(--btn-voice-bg) !important;
       color: var(--btn-voice-color) !important;
@@ -1269,6 +1283,13 @@
         </div>
         <div class="body">
           <div class="mix-panel" aria-label="混組設定">
+            <datalist id="commonEventOptions">
+              <option value="100自"></option>
+              <option value="200自"></option>
+              <option value="75自"></option>
+              <option value="50自"></option>
+              <option value="200混"></option>
+            </datalist>
             <div class="mix-top-row">
               <div>
                 <label>是否混組</label>
@@ -2400,15 +2421,21 @@
         <div class="mix-row">
           <div>
             <label for="mixItem${index}">項目${mixed ? ` ${index + 1}` : ""}</label>
-            <input id="mixItem${index}" type="text" placeholder="例：自由式 100公尺">
+            <input id="mixItem${index}" type="text" list="commonEventOptions" placeholder="例：100自">
           </div>
           <div>
             <label for="mixTime${index}">時間</label>
-            <input id="mixTime${index}" type="text" placeholder="例：1:50 含休">
+            <div class="mix-inline">
+              <input id="mixTime${index}" type="text" inputmode="numeric" placeholder="150">
+              <span class="mix-suffix">含休</span>
+            </div>
           </div>
           <div>
             <label for="mixInterval${index}">間隔</label>
-            <input id="mixInterval${index}" type="text" placeholder="例：5秒出發一個">
+            <div class="mix-inline">
+              <input id="mixInterval${index}" type="text" inputmode="numeric" placeholder="5">
+              <span class="mix-suffix">秒出發</span>
+            </div>
           </div>
         </div>
       `).join("");
