@@ -729,6 +729,13 @@
       align-items: center;
       gap: 12px;
       min-height: 40px;
+      flex-wrap: wrap;
+    }
+
+    .mix-options-title {
+      margin: 0;
+      font-weight: 800;
+      white-space: nowrap;
     }
 
     .mix-options label {
@@ -814,15 +821,15 @@
     /* Extra button row (collapsible small buttons) */
     .extra-btns {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
       margin-top: 6px;
     }
 
     .extra-btns button {
-      min-height: 42px;
-      font-size: 13px;
-      padding: 9px 10px;
+      min-height: 44px;
+      font-size: inherit;
+      padding: 11px 12px;
     }
 
     /* Save row layout */
@@ -1296,8 +1303,8 @@
             </datalist>
             <div class="mix-top-row">
               <div>
-                <label>是否混組</label>
                 <div class="mix-options">
+                  <span class="mix-options-title">是否混組</span>
                   <label><input type="radio" name="mixedGroup" id="mixedNo" value="no" checked> 否</label>
                   <label><input type="radio" name="mixedGroup" id="mixedYes" value="yes"> 是</label>
                 </div>
@@ -1312,15 +1319,16 @@
           <textarea id="commandBox" placeholder="例：林小福000出發，方小美005出發，王小明010出發，林小福110回來，方小美120回來，王小明130回來，請整理"></textarea>
           <div class="char-count-row"><span id="charCount">0 / 300</span></div>
           <div class="button-row-3">
-            <button id="listenBtn" class="btn-voice">🎤 開始語音</button>
+            <button id="listenBtn" class="btn-voice">開始語音</button>
             <button id="parseBtn" class="btn-parse">✦ 整理</button>
             <button id="stopBtn" class="btn-stop-theme" disabled>⬛ 停止</button>
           </div>
-          <div id="status" class="status">可以用手機/電腦鍵盤的語音輸入一直講，最後按整理。Chrome/Edge 可試用「開始語音」。</div>
           <div class="extra-btns">
             <button id="clearTextBtn" class="secondary">清空文字</button>
             <button id="focusInputBtn" class="secondary">繼續輸入</button>
+            <button id="loadExampleBtn" class="secondary">載入範例</button>
           </div>
+          <div id="status" class="status">可以用手機/電腦鍵盤的語音輸入一直講，最後按整理。Chrome/Edge 可試用「開始語音」。</div>
         </div>
       </section>
 
@@ -2409,6 +2417,12 @@
 
     el("parseBtn").addEventListener("click", parseAll);
     el("clearTextBtn").addEventListener("click", () => { el("commandBox").value = ""; setStatus("已清空文字。"); });
+    el("loadExampleBtn").addEventListener("click", () => {
+      el("commandBox").value = "林小福000出發，方小美005出發，王小明010出發，林小福110回來，方小美120回來，王小明130回來，請整理";
+      const charCount = el("charCount");
+      if (charCount) charCount.textContent = `${el("commandBox").value.length} / 300`;
+      setStatus("已載入口令範例。", "good");
+    });
     el("saveSettingsBtn").addEventListener("click", saveSettings);
     el("downloadSettingsBtn").addEventListener("click", downloadSettings);
     document.querySelectorAll(".saveSettingsControl").forEach((button) => button.addEventListener("click", saveSettings));
