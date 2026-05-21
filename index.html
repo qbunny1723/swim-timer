@@ -707,6 +707,57 @@
       margin-bottom: 8px;
     }
 
+    .mix-panel {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 12px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--accent-soft);
+    }
+
+    .mix-top-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 96px;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .mix-options {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 40px;
+    }
+
+    .mix-options label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin: 0;
+      font-weight: 700;
+    }
+
+    .mix-options input {
+      width: auto;
+    }
+
+    .mix-count-wrap[hidden] {
+      display: none;
+    }
+
+    .mix-rows {
+      display: grid;
+      gap: 8px;
+    }
+
+    .mix-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(0, .9fr) minmax(0, .9fr);
+      gap: 8px;
+    }
+
     .btn-voice {
       background: var(--btn-voice-bg) !important;
       color: var(--btn-voice-color) !important;
@@ -1155,6 +1206,8 @@
       .save-row #saveResultBtn { grid-column: 1 / -1; }
       .lane-grid { grid-template-columns: 1fr; }
       .snapshot-actions { grid-template-columns: 1fr; }
+      .mix-top-row,
+      .mix-row { grid-template-columns: 1fr; }
       .snapshot-meta { grid-template-columns: 1fr; }
       .snapshot-lanes { grid-template-columns: 1fr; }
       .floating-settings { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
@@ -1215,6 +1268,22 @@
           <span class="live-badge">＋ 即時整理中</span>
         </div>
         <div class="body">
+          <div class="mix-panel" aria-label="混組設定">
+            <div class="mix-top-row">
+              <div>
+                <label>是否混組</label>
+                <div class="mix-options">
+                  <label><input type="radio" name="mixedGroup" id="mixedNo" value="no" checked> 否</label>
+                  <label><input type="radio" name="mixedGroup" id="mixedYes" value="yes"> 是</label>
+                </div>
+              </div>
+              <div id="mixCountWrap" class="mix-count-wrap" hidden>
+                <label for="mixCount">幾組</label>
+                <input id="mixCount" type="number" min="2" max="8" value="2">
+              </div>
+            </div>
+            <div id="mixRows" class="mix-rows"></div>
+          </div>
           <textarea id="commandBox" placeholder="例：林立誠000出發，方瑞傑005出發，盧冠宇010出發，林立誠110回來，盧冠宇200回來，方瑞傑130回來，請整理"></textarea>
           <div class="char-count-row"><span id="charCount">0 / 300</span></div>
           <div class="button-row-3">
@@ -2323,6 +2392,28 @@
       el(id).addEventListener("input", queueSettingsAutosave);
       el(id).addEventListener("change", () => saveSettingsLocal(false));
     });
+    function renderMixRows() {
+      const mixed = el("mixedYes").checked;
+      const count = mixed ? Math.max(2, Math.min(8, Number(el("mixCount").value) || 2)) : 1;
+      el("mixCountWrap").hidden = !mixed;
+      el("mixRows").innerHTML = Array.from({ length: count }, (_, index) => `
+        <div class="mix-row">
+          <div>
+            <label for="mixItem${index}">項目${mixed ? ` ${index + 1}` : ""}</label>
+            <input id="mixItem${index}" type="text" placeholder="例：自由式 100公尺">
+          </div>
+          <div>
+            <label for="mixTime${index}">時間</label>
+            <input id="mixTime${index}" type="text" placeholder="例：1:50 含休">
+          </div>
+          <div>
+            <label for="mixInterval${index}">間隔</label>
+            <input id="mixInterval${index}" type="text" placeholder="例：5秒出發一個">
+          </div>
+        </div>
+      `).join("");
+    }
+    ["mixedNo", "mixedYes", "mixCount"].forEach((id) => el(id).addEventListener("input", renderMixRows));
     ["laneAStudents", "laneAWorkout", "laneBStudents", "laneBWorkout"].forEach((id) => {
       el(id)?.addEventListener("input", saveLanePlanLocal);
       el(id)?.addEventListener("change", saveLanePlanLocal);
@@ -2806,6 +2897,7 @@
     if (!el("groupTitle").value) el("groupTitle").value = "第1組";
     render();
     renderSnapshotList();
+    renderMixRows();
     loadSettings();
   </script>
 </body>
