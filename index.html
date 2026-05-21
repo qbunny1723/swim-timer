@@ -1064,10 +1064,6 @@
       background: var(--btn-stop-bg) !important;
       color: var(--btn-stop-color) !important;
       opacity: 1 !important;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
     }
     .btn-stop-theme:disabled {
       background: var(--btn-stop-bg) !important;
@@ -1078,14 +1074,6 @@
     #clearTextBtn {
       background: var(--btn-clear-bg) !important;
       color: var(--btn-clear-color) !important;
-    }
-
-    .stop-square {
-      width: 16px;
-      height: 16px;
-      border-radius: 4px;
-      background: currentColor;
-      display: inline-block;
     }
 
     /* Rank color badges - per rank position */
@@ -1238,13 +1226,6 @@
       letter-spacing: 1px;
     }
 
-    body[data-theme="ice"] main {
-      width: min(1600px, 100vw);
-      grid-template-columns: minmax(420px, 42%) minmax(0, 1fr);
-      gap: 16px;
-      padding-top: 0;
-    }
-
     body[data-theme="ice"] section {
       background: linear-gradient(180deg, rgba(8, 34, 67, .82), rgba(3, 22, 48, .9));
       border: 1px solid #17b6ff;
@@ -1317,13 +1298,6 @@
       color: #f5f2f4 !important;
       border: 1px solid #d95c7a;
       box-shadow: 0 0 0 1px rgba(217, 92, 122, .08), 0 8px 16px rgba(0, 0, 0, .35);
-    }
-
-    body[data-theme="ice"] .stop-square {
-      width: 21px;
-      height: 21px;
-      background: linear-gradient(180deg, #e07a92 0%, #d95c7a 100%);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 0 10px rgba(217, 92, 122, .22);
     }
 
     body[data-theme="ice"] #clearTextBtn {
@@ -1408,13 +1382,6 @@
       color: #f5c457;
       opacity: 1;
       letter-spacing: 2px;
-    }
-
-    body[data-theme="amber"] main {
-      width: min(1600px, 100vw);
-      grid-template-columns: minmax(420px, 39%) minmax(0, 1fr);
-      gap: 18px;
-      padding-top: 0;
     }
 
     body[data-theme="amber"] section {
@@ -1707,7 +1674,7 @@
           <div class="button-row-3">
             <button id="listenBtn" class="btn-voice">🎙 開始語音</button>
             <button id="parseBtn" class="btn-parse">✨ 整理</button>
-            <button id="stopBtn" class="btn-stop-theme" disabled><span class="stop-square"></span>停止</button>
+            <button id="stopBtn" class="btn-stop-theme" disabled>■ 停止</button>
           </div>
           <div class="extra-btns">
             <button id="clearTextBtn" class="secondary">🧹 清空文字</button>
