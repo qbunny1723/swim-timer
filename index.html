@@ -486,6 +486,30 @@
       margin-top: 10px;
     }
 
+    .settings-action-row {
+      grid-template-columns: 1fr;
+    }
+
+    .backup-links {
+      display: flex;
+      justify-content: center;
+      gap: 18px;
+      margin-top: 8px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .backup-link {
+      border: 0;
+      padding: 0;
+      min-height: 0;
+      background: transparent;
+      color: var(--muted);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      cursor: pointer;
+    }
+
     button {
       border: 0;
       border-radius: 7px;
@@ -1773,9 +1797,12 @@
 盧昱妡
 陳奕飛
 方玥棠</textarea>
-          <div class="button-row">
+          <div class="button-row settings-action-row">
             <button id="saveSettingsBtn">儲存</button>
-            <button id="downloadSettingsBtn" class="secondary">下載設定備份</button>
+            <div class="backup-links">
+              <button class="backup-link downloadSettingsControl" type="button">↓ 下載備份</button>
+              <button class="backup-link importSettingsControl" type="button">↑ 匯入備份</button>
+            </div>
           </div>
           <p class="small">整理時會優先從這份名單抓姓名。臨時學生直接加在最後一行即可。</p>
         </div>
@@ -1786,9 +1813,12 @@
         <div class="floating-body">
           <label for="correctionBox">每行一組：聽錯=正確</label>
           <textarea id="correctionBox" style="min-height:150px;"></textarea>
-          <div class="button-row">
+          <div class="button-row settings-action-row">
             <button class="saveSettingsControl">儲存</button>
-            <button class="downloadSettingsControl secondary">下載設定備份</button>
+            <div class="backup-links">
+              <button class="backup-link downloadSettingsControl" type="button">↓ 下載備份</button>
+              <button class="backup-link importSettingsControl" type="button">↑ 匯入備份</button>
+            </div>
           </div>
           <p class="small">例：語音常把「林昱辰」聽成「林泳辰」，就填 `泳辰=昱辰`。整理時會先自動替換。</p>
         </div>
@@ -1814,9 +1844,12 @@
 阿乖=盧昱妡
 阿飛=陳奕飛
 玥棠=方玥棠</textarea>
-          <div class="button-row">
+          <div class="button-row settings-action-row">
             <button class="saveSettingsControl">儲存</button>
-            <button class="downloadSettingsControl secondary">下載設定備份</button>
+            <div class="backup-links">
+              <button class="backup-link downloadSettingsControl" type="button">↓ 下載備份</button>
+              <button class="backup-link importSettingsControl" type="button">↑ 匯入備份</button>
+            </div>
           </div>
           <p class="small">可以喊小名，例如「芮婕005出發」。結果會自動記到「方芮婕」。不要只填單一個字，兩個字以上會比較穩。</p>
         </div>
@@ -1945,6 +1978,8 @@
       </div>
     </div>
   </div>
+
+  <input id="settingsImportInput" type="file" accept="application/json,.json" hidden>
 
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbzLKnWnLUhGO2nLKm5CCbqX3RfcOkKuDH6ymeVqefDOLiXpjCWSN5Vj5ksM5XkBT8K3Rg/exec"; // 新版游泳 Apps Script /exec 網址
@@ -2288,6 +2323,27 @@
       a.click();
       URL.revokeObjectURL(a.href);
       setStatus("已下載設定備份。", "good");
+    }
+
+    function requestImportSettings() {
+      const input = el("settingsImportInput");
+      if (!input) return;
+      input.value = "";
+      input.click();
+    }
+
+    async function importSettingsFile(file) {
+      if (!file) return;
+      try {
+        const payload = JSON.parse(await file.text());
+        if (!payload || typeof payload !== "object") throw new Error("invalid-settings");
+        if (!applySettings(payload)) throw new Error("invalid-settings");
+        const localPayload = settingsPayload();
+        try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(localPayload)); } catch {}
+        setStatus("已匯入備份並暫存在這台裝置。確認名單後請按「儲存」同步到雲端。", "good");
+      } catch {
+        setStatus("匯入失敗：請確認選到的是設定備份 JSON 檔。", "bad");
+      }
     }
 
     function corrections() {
@@ -2928,9 +2984,10 @@
       setStatus("已載入口令範例。", "good");
     });
     el("saveSettingsBtn").addEventListener("click", saveSettings);
-    el("downloadSettingsBtn").addEventListener("click", downloadSettings);
     document.querySelectorAll(".saveSettingsControl").forEach((button) => button.addEventListener("click", saveSettings));
     document.querySelectorAll(".downloadSettingsControl").forEach((button) => button.addEventListener("click", downloadSettings));
+    document.querySelectorAll(".importSettingsControl").forEach((button) => button.addEventListener("click", requestImportSettings));
+    el("settingsImportInput").addEventListener("change", (event) => importSettingsFile(event.target.files?.[0]));
     ["rosterBox", "correctionBox", "aliasBox"].forEach((id) => {
       el(id).addEventListener("input", queueSettingsAutosave);
       el(id).addEventListener("change", () => saveSettingsLocal(false));
