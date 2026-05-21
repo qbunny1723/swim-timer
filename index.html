@@ -1212,10 +1212,12 @@
     }
 
     body[data-theme="ice"] header {
-      background:
-        radial-gradient(circle at 18% 38%, rgba(25, 210, 255, .18), transparent 26%),
-        radial-gradient(circle at 82% 4%, rgba(69, 126, 255, .16), transparent 28%),
-        linear-gradient(135deg, #031326 0%, #061b35 45%, #021022 100%);
+      background-image:
+        linear-gradient(90deg, rgba(3, 19, 38, .96) 0%, rgba(3, 19, 38, .82) 34%, rgba(3, 19, 38, .18) 66%, rgba(3, 19, 38, .04) 100%),
+        url("assets/hero-swimmer-ice-clean.png");
+      background-size: cover, cover;
+      background-position: center, center right;
+      background-repeat: no-repeat, no-repeat;
       box-shadow: inset 0 -1px 0 rgba(25, 210, 255, .14);
     }
 
@@ -1540,6 +1542,9 @@
       .hero-copy { min-height: 132px; }
       h1 { font-size: 29px; }
       .hero-subtitle { font-size: 17px; }
+      body[data-theme="ice"] header {
+        background-position: center, 58% center;
+      }
       .settings-menu { top: 10px; right: 10px; }
       .settings-menu { right: auto; left: 300px; }
       .settings-toggle { min-width: 58px; padding: 8px 10px; }
