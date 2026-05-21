@@ -1588,7 +1588,17 @@
       }
       .settings-menu { top: 10px; right: auto; left: 14px; }
       .settings-toggle { min-width: 58px; padding: 8px 10px; }
-      .settings-panel { width: 164px; }
+      .settings-panel {
+        position: fixed;
+        top: 58px;
+        left: 14px;
+        right: auto;
+        width: min(330px, calc(100vw - 28px));
+        max-height: 68dvh;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        z-index: 80;
+      }
       main {
         display: flex;
         flex-direction: column;
