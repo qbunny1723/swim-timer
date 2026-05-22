@@ -3057,6 +3057,18 @@
         }
         return merged;
       };
+      const splitByRoster = (segment) => {
+        const tokens = nameTokens().sort((a, b) => b.token.length - a.token.length);
+        const parts = [];
+        let index = 0;
+        while (index < segment.length) {
+          const match = tokens.find((item) => segment.startsWith(item.token, index));
+          if (!match) return [segment];
+          parts.push(match.token);
+          index += match.token.length;
+        }
+        return parts.length > 1 ? parts : [segment];
+      };
       const pushItem = (raw, rawName, timeRaw = "-", action = "-") => {
         const name = String(rawName || "").replace(/^[,，、;；]+|[,，、;；]+$/g, "").trim();
         if (!name) return;
@@ -3084,7 +3096,9 @@
           pushItem(match[0], rawName, timeRaw, action);
         }
         if (!matched && segment) {
-          pushItem(segment, segment);
+          for (const namePart of splitByRoster(segment)) {
+            pushItem(namePart, namePart);
+          }
         }
       }
       if (!items.length && normalized) {
