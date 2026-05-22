@@ -966,6 +966,19 @@
       align-self: end;
     }
 
+    .mix-group-select {
+      min-height: 40px;
+      border-radius: 7px;
+      background: var(--panel);
+      color: var(--accent);
+      font-weight: 950;
+      border: 1px solid var(--line);
+      align-self: end;
+      text-align: center;
+      text-align-last: center;
+      padding: 8px 6px;
+    }
+
     .mix-item-control {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 74px;
@@ -1391,6 +1404,25 @@
     .rank-2 { background: var(--rank2-bg); color: var(--rank2-color); }
     .rank-3 { background: var(--rank3-bg); color: var(--rank3-color); }
     .rank-4up { background: var(--rank4-bg); color: var(--rank4-color); }
+
+    .cycle-diff-badge {
+      display: inline-block;
+      margin-left: 4px;
+      border-radius: 999px;
+      padding: 1px 6px;
+      font-size: 11px;
+      font-weight: 850;
+      vertical-align: 1px;
+      border: 1px solid currentColor;
+    }
+    .cycle-diff-plus {
+      color: var(--bad);
+      background: color-mix(in srgb, var(--bad), transparent 88%);
+    }
+    .cycle-diff-minus {
+      color: var(--good);
+      background: color-mix(in srgb, var(--good), transparent 86%);
+    }
 
     /* See detail button uses theme color */
     .see-detail-btn {
@@ -2027,11 +2059,12 @@
                   <option value="2">B</option>
                   <option value="3">C</option>
                   <option value="4">D</option>
+                  <option value="5">E</option>
                 </select>
               </div>
               <div id="mixCountWrap" class="mix-count-wrap" hidden>
                 <label for="mixCount">課表組數</label>
-                <input id="mixCount" type="number" min="2" max="8" value="2">
+                <input id="mixCount" type="number" min="2" max="5" value="2">
               </div>
             </div>
             <div id="mixRows" class="mix-rows"></div>
@@ -2219,7 +2252,7 @@
           <button id="clearSnapshotsBtn" class="danger">清空暫存</button>
         </div>
         <div id="snapshotList" class="snapshot-list"></div>
-        <p class="small">每一組暫存後都可以點開，事後補 A/B/C/D 課表，並逐一標記學生這組游哪一個課表。</p>
+        <p class="small">每一組暫存後都可以點開，事後補 A/B/C/D/E 課表，並逐一標記學生這組游哪一個課表。</p>
       </div>
     </section>
 
@@ -2249,6 +2282,7 @@
     const LANE_PLAN_KEY = "swimTimerLanePlan";
     const SNAPSHOT_KEY = "swimTimerSnapshots";
     const maxTrips = 6;
+    const COURSE_GROUPS = ["A", "B", "C", "D", "E"];
     const state = { entries: [], issues: [], summaryMetaOverrides: {} };
     const parseState = { source: "", items: [], issues: [] };
     let snapshots = [];
@@ -3394,16 +3428,63 @@
       });
     }
 
+    function courseGroupLetter(value) {
+      const index = Math.max(0, Math.min(COURSE_GROUPS.length - 1, Number(value || 1) - 1));
+      return COURSE_GROUPS[index] || "A";
+    }
+
+    function defaultCourseGroupValue() {
+      return Math.max(1, Math.min(COURSE_GROUPS.length, Number(el("defaultCourseGroup")?.value) || 1));
+    }
+
+    function collectMixRowDrafts() {
+      const rows = [];
+      document.querySelectorAll("#mixRows .mix-row").forEach((row, index) => {
+        rows[index] = {
+          group: Number(el(`mixGroup${index}`)?.value) || (index === 0 ? defaultCourseGroupValue() : index + 1),
+          item: el(`mixItem${index}`)?.value || "",
+          timeRaw: el(`mixTime${index}`)?.value || "",
+          intervalRaw: el(`mixInterval${index}`)?.value || "",
+        };
+      });
+      return rows;
+    }
+
+    function firstAvailableCourseGroup(used = new Set()) {
+      for (let value = 1; value <= COURSE_GROUPS.length; value++) {
+        if (!used.has(value)) return value;
+      }
+      return 1;
+    }
+
+    function activeCoursePlanRows() {
+      const rows = mixPlanRows();
+      const seen = new Set();
+      return rows.filter((row) => {
+        if (!row?.group || seen.has(row.group)) return false;
+        seen.add(row.group);
+        return true;
+      });
+    }
+
     function mixPlanRows() {
-      const count = el("mixedYes")?.checked
-        ? Math.max(2, Math.min(8, Number(el("mixCount")?.value) || 2))
+      const mixed = el("mixedYes")?.checked;
+      const count = mixed
+        ? Math.max(2, Math.min(COURSE_GROUPS.length, Number(el("mixCount")?.value) || 2))
         : 1;
+      const defaultGroup = defaultCourseGroupValue();
       return Array.from({ length: count }, (_, index) => {
-        const item = el(`mixItem${index}`)?.value.trim() || `課表內容${String.fromCharCode(65 + index)}`;
+        const group = index === 0
+          ? defaultGroup
+          : Math.max(1, Math.min(COURSE_GROUPS.length, Number(el(`mixGroup${index}`)?.value) || index + 1));
+        const groupLabel = courseGroupLetter(group);
+        const item = el(`mixItem${index}`)?.value.trim() || `課表內容${groupLabel}`;
         const timeRaw = el(`mixTime${index}`)?.value.trim() || "";
         const intervalRaw = el(`mixInterval${index}`)?.value.trim() || "";
         return {
           index,
+          group,
+          groupLabel,
           item,
           timeRaw,
           time: parseTime(timeRaw),
@@ -3428,18 +3509,18 @@
     function summaryMetaForName(name, entries = state.entries) {
       const defaults = defaultPersonOrder(entries);
       const personOrder = Number(state.summaryMetaOverrides[name]?.personOrder || defaults[name] || "");
-      const plan = mixPlanRows();
-      const overriddenGroup = state.summaryMetaOverrides[name]?.courseGroup;
-      const defaultGroup = Number(el("defaultCourseGroup")?.value || 1);
-      const planIndex = Math.max(0, Math.min(plan.length - 1, Number(overriddenGroup || defaultGroup || 1) - 1));
-      const planRow = plan[planIndex] || {};
+      const plan = activeCoursePlanRows();
+      const overriddenGroup = Number(state.summaryMetaOverrides[name]?.courseGroup || 0);
+      const defaultGroup = defaultCourseGroupValue();
+      const chosenGroup = plan.some((row) => row.group === overriddenGroup) ? overriddenGroup : defaultGroup;
+      const planRow = plan.find((row) => row.group === chosenGroup) || plan[0] || {};
       return {
         personOrder: personOrder || "",
-        courseGroup: planIndex + 1,
+        courseGroup: planRow.group || defaultGroup,
         item: planRow.item || "",
         timeRaw: planRow.timeRaw || "",
         time: planRow.time || null,
-        planIndex,
+        planIndex: Number.isFinite(planRow.index) ? planRow.index : 0,
       };
     }
 
@@ -3507,6 +3588,21 @@
       return map;
     }
 
+    function courseIntervalDiffMap(trips, expectedSeconds) {
+      const map = new Map();
+      if (!Number.isFinite(expectedSeconds) || expectedSeconds <= 0) return map;
+      for (let index = 1; index < trips.length; index++) {
+        const previousStart = entryTotal(trips[index - 1]?.start);
+        const currentStart = entryTotal(trips[index]?.start);
+        if (!Number.isFinite(previousStart) || !Number.isFinite(currentStart)) continue;
+        const actualInterval = currentStart - previousStart;
+        if (!Number.isFinite(actualInterval) || actualInterval <= 0) continue;
+        const diff = actualInterval - expectedSeconds;
+        if (diff !== 0) map.set(index, diff);
+      }
+      return map;
+    }
+
     function fmt(total) {
       if (total === null || total === undefined || total === "") return "";
       const sign = total < 0 ? "-" : "";
@@ -3519,6 +3615,35 @@
       if (Number.isFinite(entry.time.total)) return entry.time.total;
       const normalized = normalizeTimeObject(entry.time);
       return Number.isFinite(normalized?.total) ? normalized.total : null;
+    }
+
+    function maybeAskCourseGroupChange(name) {
+      if (!el("mixedYes")?.checked) return;
+      const plan = activeCoursePlanRows();
+      if (plan.length <= 1) return;
+      const currentGroup = summaryMetaForName(name).courseGroup;
+      const alternatives = plan.filter((row) => row.group !== currentGroup);
+      if (!alternatives.length) return;
+
+      if (alternatives.length === 1) {
+        const target = alternatives[0];
+        if (confirm(`是否要把 ${name} 改到 ${target.groupLabel} 課表？`)) {
+          state.summaryMetaOverrides[name] ||= {};
+          state.summaryMetaOverrides[name].courseGroup = target.group;
+        }
+        return;
+      }
+
+      if (!confirm(`是否要更動 ${name} 的課表組？`)) return;
+      const labels = alternatives.map((row) => row.groupLabel).join(" / ");
+      const answer = (prompt(`請輸入要改成哪一組：${labels}`, alternatives[0].groupLabel) || "").trim().toUpperCase();
+      const target = alternatives.find((row) => row.groupLabel === answer || String(row.group) === answer);
+      if (target) {
+        state.summaryMetaOverrides[name] ||= {};
+        state.summaryMetaOverrides[name].courseGroup = target.group;
+      } else if (answer) {
+        alert(`沒有找到 ${answer} 課表，課表組維持不變。`);
+      }
     }
 
     function render() {
@@ -3545,10 +3670,11 @@
             });
             const valid = results.filter((v) => v !== null && v >= 0);
             const personalRanks = personalRankMap(results);
+            const intervalDiffs = courseIntervalDiffMap(trips, meta.time?.total);
             const metrics = swimmerMetrics(trips);
             const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "";
-            const courseOptions = mixPlanRows().map((_, index) =>
-              `<option value="${index + 1}"${meta.courseGroup === index + 1 ? " selected" : ""}>${String.fromCharCode(65 + index)}</option>`
+            const courseOptions = activeCoursePlanRows().map((row) =>
+              `<option value="${row.group}"${meta.courseGroup === row.group ? " selected" : ""}>${row.groupLabel}</option>`
             ).join("");
             return `<tr>
               <td><input class="person-order-input" data-person-order="${escapeHtml(name)}" type="number" min="1" value="${escapeHtml(meta.personOrder)}"></td>
@@ -3560,6 +3686,12 @@
                 const result = results[i];
                 const bad = result !== null && result < 0;
                 const rank = result !== null && result >= 0 ? personalRanks.get(i) : "";
+                const cycleDiff = intervalDiffs.get(i);
+                const cycleDiffLabel = Number.isFinite(cycleDiff) ? `${cycleDiff > 0 ? "+" : ""}${cycleDiff}秒` : "";
+                const cycleDiffClass = cycleDiff > 0 ? "cycle-diff-plus" : "cycle-diff-minus";
+                const cycleDiffTitle = Number.isFinite(cycleDiff)
+                  ? `出發週期差：本趟出發 - 上一趟出發，比含休${cycleDiff > 0 ? "多" : "少"}${Math.abs(cycleDiff)}秒`
+                  : "";
                 const resultLabel = bad ? "回來早於出發" : fmt(result);
                 const detailArgs = [
                   name,
@@ -3572,7 +3704,7 @@
                 const rankClass = rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : "rank-4up";
                 return `<td class="${bad ? "issue" : "result"}">${
                   resultLabel
-                    ? `<button class="result-btn" onclick='showTripDetail(${detailArgs})'>${resultLabel}${rank ? `<span class="rank-badge ${rankClass}">#${rank}</span>` : ""}</button>`
+                    ? `<button class="result-btn" onclick='showTripDetail(${detailArgs})'>${resultLabel}${rank ? `<span class="rank-badge ${rankClass}">#${rank}</span>` : ""}${cycleDiffLabel ? `<span class="cycle-diff-badge ${cycleDiffClass}" title="${escapeHtml(cycleDiffTitle)}">${cycleDiffLabel}</span>` : ""}</button>`
                     : ""
                 }</td>`;
               }).join("")}
@@ -3591,6 +3723,7 @@
           const name = input.dataset.personOrder;
           state.summaryMetaOverrides[name] ||= {};
           state.summaryMetaOverrides[name].personOrder = Number(input.value) || "";
+          maybeAskCourseGroupChange(name);
           render();
         });
       });
@@ -3857,23 +3990,51 @@
     });
     function renderMixRows() {
       const mixed = el("mixedYes").checked;
-      const count = mixed ? Math.max(2, Math.min(8, Number(el("mixCount").value) || 2)) : 1;
+      const mixCountInput = el("mixCount");
+      if (mixCountInput) mixCountInput.max = String(COURSE_GROUPS.length);
+      const requestedCount = Number(mixCountInput?.value) || 2;
+      const count = mixed ? Math.max(2, Math.min(COURSE_GROUPS.length, requestedCount)) : 1;
+      if (mixCountInput && Number(mixCountInput.value) !== count) mixCountInput.value = String(count);
       el("mixCountWrap").hidden = !mixed;
+
+      const drafts = collectMixRowDrafts();
       const defaultCourseGroup = el("defaultCourseGroup");
       if (defaultCourseGroup) {
-        const current = Math.max(1, Math.min(count, Number(defaultCourseGroup.value) || 1));
-        defaultCourseGroup.innerHTML = Array.from({ length: count }, (_, index) =>
-          `<option value="${index + 1}">${String.fromCharCode(65 + index)}</option>`
+        const current = defaultCourseGroupValue();
+        defaultCourseGroup.innerHTML = COURSE_GROUPS.map((label, index) =>
+          `<option value="${index + 1}">${label}</option>`
         ).join("");
         defaultCourseGroup.value = String(current);
       }
-      el("mixRows").innerHTML = Array.from({ length: count }, (_, index) => `
+
+      const defaultGroup = defaultCourseGroupValue();
+      const used = new Set([defaultGroup]);
+      const rowGroups = Array.from({ length: count }, (_, index) => {
+        if (index === 0) return defaultGroup;
+        let group = Number(drafts[index]?.group) || firstAvailableCourseGroup(used);
+        if (group === defaultGroup || used.has(group) || group < 1 || group > COURSE_GROUPS.length) {
+          group = firstAvailableCourseGroup(used);
+        }
+        used.add(group);
+        return group;
+      });
+
+      const groupOptions = (selectedGroup, rowIndex) => COURSE_GROUPS.map((label, index) => {
+        const value = index + 1;
+        const usedByOtherRow = rowGroups.some((group, groupIndex) => groupIndex !== rowIndex && group === value);
+        const disabled = rowIndex > 0 && usedByOtherRow ? " disabled" : "";
+        return `<option value="${value}"${selectedGroup === value ? " selected" : ""}${disabled}>${label}</option>`;
+      }).join("");
+
+      el("mixRows").innerHTML = rowGroups.map((group, index) => `
         <div class="mix-row">
-          <div class="mix-group-label">${String.fromCharCode(65 + index)}</div>
+          ${index === 0
+            ? `<div class="mix-group-label">${courseGroupLetter(group)}</div>`
+            : `<select id="mixGroup${index}" class="mix-group-select" data-mix-group-index="${index}" aria-label="課表組">${groupOptions(group, index)}</select>`}
           <div>
             <label for="mixItem${index}">課表內容</label>
             <div class="mix-item-control">
-              <input id="mixItem${index}" type="text" placeholder="例：100自">
+              <input id="mixItem${index}" type="text" placeholder="例：100自" value="${escapeHtml(drafts[index]?.item || "")}">
               <select data-mix-item-select="${index}" aria-label="常用項目">
                 <option value="">選</option>
                 <option value="100自">100自</option>
@@ -3888,19 +4049,26 @@
           <div>
             <label for="mixTime${index}">含休</label>
             <div class="mix-inline">
-              <input id="mixTime${index}" type="text" inputmode="numeric" placeholder="150">
+              <input id="mixTime${index}" type="text" inputmode="numeric" placeholder="150" value="${escapeHtml(drafts[index]?.timeRaw || "")}">
               <span class="mix-suffix">含休</span>
             </div>
           </div>
           <div>
             <label for="mixInterval${index}">出發間隔</label>
             <div class="mix-inline">
-              <input id="mixInterval${index}" type="text" inputmode="numeric" placeholder="5">
+              <input id="mixInterval${index}" type="text" inputmode="numeric" placeholder="5" value="${escapeHtml(drafts[index]?.intervalRaw || "")}">
               <span class="mix-suffix">秒出發</span>
             </div>
           </div>
         </div>
       `).join("");
+
+      el("mixRows").querySelectorAll("[data-mix-group-index]").forEach((select) => {
+        select.addEventListener("change", () => {
+          renderMixRows();
+          if (state.entries.length) render();
+        });
+      });
       el("mixRows").querySelectorAll("[data-mix-item-select]").forEach((select) => {
         select.addEventListener("change", () => {
           if (!select.value || select.value === "custom") return;
@@ -3915,8 +4083,13 @@
         });
       });
     }
-    ["mixedNo", "mixedYes", "mixCount"].forEach((id) => el(id).addEventListener("input", renderMixRows));
+
+    ["mixedNo", "mixedYes", "mixCount"].forEach((id) => el(id).addEventListener("input", () => {
+      renderMixRows();
+      if (state.entries.length) render();
+    }));
     el("defaultCourseGroup")?.addEventListener("change", () => {
+      renderMixRows();
       if (state.entries.length) render();
     });
     ["laneAStudents", "laneAWorkout", "laneBStudents", "laneBWorkout"].forEach((id) => {
