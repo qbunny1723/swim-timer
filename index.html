@@ -1249,6 +1249,29 @@
       white-space: nowrap;
     }
 
+    .parse-preview-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .parse-toggle-btn {
+      border: 1px solid color-mix(in srgb, var(--accent), transparent 52%);
+      background: color-mix(in srgb, var(--accent-soft), transparent 35%);
+      color: var(--accent);
+      min-height: 0;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    .parse-preview.collapsed .parse-preview-table,
+    .parse-preview.collapsed .parse-preview-hint {
+      display: none;
+    }
+
     .parse-preview-table {
       display: grid;
       grid-template-columns: minmax(86px, 1.05fr) minmax(50px, .58fr) minmax(54px, .62fr) minmax(86px, 1.05fr) minmax(70px, .8fr);
@@ -1994,7 +2017,10 @@
           <section id="parsePreview" class="parse-preview" hidden>
             <div class="parse-preview-head">
               <span>解析結果</span>
-              <span id="parsePreviewCount" class="parse-preview-count">0 筆</span>
+              <div class="parse-preview-actions">
+                <span id="parsePreviewCount" class="parse-preview-count">0 筆</span>
+                <button id="parseToggleBtn" class="parse-toggle-btn" type="button">收起</button>
+              </div>
             </div>
             <div id="parsePreviewTable" class="parse-preview-table"></div>
             <div class="parse-preview-hint">解析只先拆口令並判定姓名，確認無誤後再按「整理」。</div>
@@ -2100,7 +2126,7 @@
       </section>
 
       <section class="save-section" style="margin-top:16px;">
-        <div class="section-title">本組成績</div>
+        <div class="section-title">本組資訊</div>
         <div class="body">
           <div class="save-row">
             <div class="save-field">
@@ -2120,33 +2146,8 @@
                 <option>第8組</option>
               </select>
             </div>
-            <button id="saveResultBtn" class="btn-save-coral">💾 儲存</button>
           </div>
-          <div class="lane-grid">
-            <div class="lane-card">
-              <div class="lane-title">A 水道</div>
-              <div class="save-field">
-                <label class="save-label">學生</label>
-                <textarea id="laneAStudents" class="save-input" placeholder="例：林育丞、方芮婕、盧冠羽"></textarea>
-              </div>
-              <div class="save-field">
-                <label class="save-label">課表</label>
-                <textarea id="laneAWorkout" class="save-input" placeholder="例：100x6 150秒含休息"></textarea>
-              </div>
-            </div>
-            <div class="lane-card">
-              <div class="lane-title">B 水道</div>
-              <div class="save-field">
-                <label class="save-label">學生</label>
-                <textarea id="laneBStudents" class="save-input" placeholder="例：黃柏豪、陳唯恩、方玥棠"></textarea>
-              </div>
-              <div class="save-field">
-                <label class="save-label">課表</label>
-                <textarea id="laneBWorkout" class="save-input" placeholder="例：50x8 75秒含休息"></textarea>
-              </div>
-            </div>
-          </div>
-          <p class="small" style="display:flex;align-items:center;gap:5px;margin-top:8px;">🔒 儲存後可隨時開啟編輯與查看歷史紀錄</p>
+          <p class="small" style="display:flex;align-items:center;gap:5px;margin-top:8px;">日期與組別會用在暫存紀錄。</p>
           <div class="button-row" style="margin-top:8px;">
             <button id="exportBtn" class="secondary">匯出 CSV</button>
             <button id="copyBtn" class="secondary">複製表格</button>
@@ -3123,6 +3124,7 @@
       const box = el("parsePreview");
       const table = el("parsePreviewTable");
       const count = el("parsePreviewCount");
+      const toggle = el("parseToggleBtn");
       if (!box || !table || !count) return;
       if (!parseState.items.length && !parseState.issues.length) {
         box.hidden = true;
@@ -3132,6 +3134,7 @@
       }
       box.hidden = false;
       count.textContent = `${parseState.items.length} 筆`;
+      if (toggle) toggle.textContent = box.classList.contains("collapsed") ? "展開" : "收起";
       const rows = parseState.items.map((item, index) => {
         const needsCorrection = item.method !== "完全符合" || item.rawName !== item.name;
         const rawNameCell = needsCorrection
@@ -3176,6 +3179,14 @@
       parseState.issues = result.issues;
       renderParsePreview();
       setStatus(`解析完成：${parseState.items.length} 筆。確認無誤後可按「整理」。`, parseState.issues.length ? "bad" : "good");
+    }
+
+    function setParsePreviewCollapsed(collapsed) {
+      const box = el("parsePreview");
+      const toggle = el("parseToggleBtn");
+      if (!box) return;
+      box.classList.toggle("collapsed", collapsed);
+      if (toggle) toggle.textContent = collapsed ? "展開" : "收起";
     }
 
     function addCorrectionAlias(rightName, wrongName) {
@@ -3279,6 +3290,7 @@
         addEntry(item.name, item.action, parsedTime, item.raw, false, parseDeduct(item.timeRaw));
       }
       render();
+      setParsePreviewCollapsed(true);
       const ok = state.entries.length;
       const bad = state.issues.length;
       setStatus(`整理完成：${ok} 筆成功${bad ? `，${bad} 筆提醒` : ""}。`, bad ? "bad" : "good");
@@ -3305,6 +3317,7 @@
         addEntry(command.name, command.action, parsedTime, command.raw, false, parseDeduct(command.timeRaw));
       }
       render();
+      setParsePreviewCollapsed(true);
       const ok = state.entries.length;
       const bad = state.issues.length;
       setStatus(`已整理 ${ok} 筆紀錄${bad ? `，有 ${bad} 筆需要確認` : ""}。`, bad ? "bad" : "good");
@@ -3843,7 +3856,11 @@
       el("summaryTable").scrollIntoView({ behavior: "smooth", block: "start" });
     });
 
-    el("saveResultBtn").addEventListener("click", saveResultToDrive);
+    el("parseToggleBtn")?.addEventListener("click", () => {
+      const box = el("parsePreview");
+      setParsePreviewCollapsed(!box?.classList.contains("collapsed"));
+    });
+    el("saveResultBtn")?.addEventListener("click", saveResultToDrive);
     el("snapshotBtn").addEventListener("click", saveCurrentSnapshot);
     el("uploadSnapshotsBtn").addEventListener("click", uploadSnapshotsToDrive);
     el("uploadSummaryBtn").addEventListener("click", uploadSnapshotSummaryToDrive);
