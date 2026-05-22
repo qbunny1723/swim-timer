@@ -2677,19 +2677,19 @@
     function nameTokens() {
       const tokens = [];
       const seen = new Set();
-      const addToken = (token, name) => {
+      const addToken = (token, name, type = "alias") => {
         if (!token || token.length < 2) return;
         const key = `${token}=>${name}`;
         if (seen.has(key)) return;
         seen.add(key);
-        tokens.push({ token, name });
+        tokens.push({ token, name, type });
       };
       rosterNames().forEach((name) => {
-        addToken(name, name);
-        if (name.length >= 3) addToken(name.slice(-2), name);
+        addToken(name, name, "full");
+        if (name.length >= 3) addToken(name.slice(-2), name, "suffix");
       });
       for (const { alias, name } of aliasEntries()) {
-        addToken(alias, name);
+        addToken(alias, name, "alias");
       }
       return tokens.sort((a, b) => b.token.length - a.token.length);
     }
@@ -2773,12 +2773,14 @@
       濟: "ㄐㄧˋ", 禮: "ㄌㄧˇ", 謙: "ㄑㄧㄢ", 豐: "ㄈㄥ", 鍾: "ㄓㄨㄥ", 韓: "ㄏㄢˊ", 顏: "ㄧㄢˊ",
       魏: "ㄨㄟˋ", 劍: "ㄐㄧㄢˋ", 嚴: "ㄧㄢˊ", 寬: "ㄎㄨㄢ", 欣: "ㄒㄧㄣ", 沛: "ㄆㄟˋ", 育: "ㄩˋ",
       丞: "ㄔㄥˊ", 羽: "ㄩˇ", 祤: "ㄩˋ", 絜: "ㄐㄧㄝˊ", 昱: "ㄩˋ", 妡: "ㄒㄧㄣ", 敬: "ㄐㄧㄥˋ",
-      芫: "ㄩㄢˊ", 唯: "ㄨㄟˊ", 奕: "ㄧˋ", 信: "ㄒㄧㄣˋ", 畇: "ㄩㄣˊ", 嬨: "ㄔㄣˊ", 彤: "ㄊㄨㄥˊ",
+      芫: "ㄩㄢˊ", 唯: "ㄨㄟˊ", 奕: "ㄧˋ", 信: "ㄒㄧㄣˋ", 畇: "ㄩㄣˊ", 嬨: "ㄘˊ", 彤: "ㄊㄨㄥˊ",
       劭: "ㄕㄠˋ", 玥: "ㄩㄝˋ", 芮: "ㄖㄨㄟˋ", 婕: "ㄐㄧㄝˊ", 柏: "ㄅㄛˊ", 邦: "ㄅㄤ", 趙: "ㄓㄠˋ",
       比: "ㄅㄧˇ", 乖: "ㄍㄨㄞ", 張: "ㄓㄤ", 伽: "ㄐㄧㄚ", 意: "ㄧˋ", 義: "ㄧˋ", 易: "ㄧˋ", 藝: "ㄧˋ",
       少: "ㄕㄠˇ", 兆: "ㄓㄠˋ", 妹: "ㄇㄟˋ", 每: "ㄇㄟˇ", 款: "ㄎㄨㄢˇ", 圓: "ㄩㄢˊ", 園: "ㄩㄢˊ",
       猿: "ㄩㄢˊ", 源: "ㄩㄢˊ", 雲: "ㄩㄣˊ", 云: "ㄩㄣˊ", 辰: "ㄔㄣˊ", 承: "ㄔㄥˊ", 成: "ㄔㄥˊ",
       皓: "ㄏㄠˋ", 芸: "ㄩㄣˊ", 霏: "ㄈㄟ", 月: "ㄩㄝˋ", 玉: "ㄩˋ", 心: "ㄒㄧㄣ", 怡: "ㄧˊ",
+      如: "ㄖㄨˊ", 宇: "ㄩˇ", 哥: "ㄍㄜ", 緣: "ㄩㄢˊ", 逸: "ㄧˋ", 菲: "ㄈㄟ", 綸: "ㄌㄨㄣˊ",
+      靖: "ㄐㄧㄥˋ", 佩: "ㄆㄟˋ", 幫: "ㄅㄤ",
     };
 
     function bopoCode(text) {
@@ -2788,8 +2790,31 @@
         .join(" ");
     }
 
+    function likelyNameTokens(cleaned) {
+      const tokens = nameTokens();
+      if (cleaned.length <= 2) return tokens.filter((item) => item.type !== "full" || item.token.length <= 2);
+      return tokens;
+    }
+
+    function bestNameMatch(cleaned, scorer) {
+      let best = null;
+      let bestScore = 0;
+      let tied = false;
+      for (const item of likelyNameTokens(cleaned)) {
+        const score = scorer(item);
+        if (score > bestScore) {
+          bestScore = score;
+          best = item;
+          tied = false;
+        } else if (score === bestScore && best && item.name !== best.name) {
+          tied = true;
+        }
+      }
+      return { best, bestScore, tied };
+    }
+
     function resolveParsedName(rawName) {
-      const cleaned = String(rawName || "").trim();
+      const cleaned = String(rawName || "").replace(/[0-9０-９]+$/g, "").trim();
       const token = nameTokens().find((item) => cleaned === item.token || cleaned.endsWith(item.token));
       if (token) {
         return { name: token.name, method: token.name === cleaned ? "完全符合" : "小名", score: 100 };
@@ -2798,33 +2823,15 @@
       if (correction) {
         return { name: correction.right, method: "校正", score: 100 };
       }
-      let best = null;
-      let bestScore = 0;
-      for (const item of nameTokens()) {
-        const score = similarityScore(cleaned, item.token);
-        if (score > bestScore) {
-          bestScore = score;
-          best = item;
-        }
-      }
-      if (best && bestScore >= 70) {
+      const { best, bestScore, tied } = bestNameMatch(cleaned, (item) => similarityScore(cleaned, item.token));
+      if (best && bestScore >= 70 && !tied) {
         return { name: best.name, method: "模糊", score: bestScore };
       }
       const cleanedBopo = bopoCode(cleaned);
-      let bestBopo = null;
-      let bestBopoScore = 0;
-      let bopoTie = false;
-      for (const item of nameTokens()) {
-        const score = similarityScore(cleanedBopo, bopoCode(item.token));
-        if (score > bestBopoScore) {
-          bestBopoScore = score;
-          bestBopo = item;
-          bopoTie = false;
-        } else if (score === bestBopoScore && bestBopo && item.name !== bestBopo.name) {
-          bopoTie = true;
-        }
-      }
-      if (bestBopo && bestBopoScore >= 80 && !bopoTie) {
+      const { best: bestBopo, bestScore: bestBopoScore, tied: bopoTie } =
+        bestNameMatch(cleaned, (item) => similarityScore(cleanedBopo, bopoCode(item.token)));
+      const bopoThreshold = cleaned.length <= 2 ? 75 : 80;
+      if (bestBopo && bestBopoScore >= bopoThreshold && !bopoTie) {
         return { name: bestBopo.name, method: "注音模糊", score: bestBopoScore };
       }
       return { name: cleaned, method: "未辨識", score: bestScore };
