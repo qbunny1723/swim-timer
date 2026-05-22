@@ -908,7 +908,14 @@
 
     .mix-top-row {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 120px 96px;
+      grid-template-columns: 120px minmax(0, 1fr);
+      gap: 10px;
+      align-items: end;
+    }
+
+    .mix-control-row {
+      display: grid;
+      grid-template-columns: 120px 96px minmax(0, 1fr);
       gap: 10px;
       align-items: end;
     }
@@ -1970,6 +1977,7 @@
       .lane-grid { grid-template-columns: 1fr; }
       .snapshot-actions { grid-template-columns: 1fr; }
       .mix-top-row { grid-template-columns: 1fr; }
+      .mix-control-row { grid-template-columns: minmax(0, 1fr) minmax(0, .8fr); }
       .mix-row { grid-template-columns: 44px minmax(0, 1.15fr) minmax(0, .85fr) minmax(0, .85fr); gap: 6px; }
       .mix-item-control { grid-template-columns: minmax(0, 1fr) 58px; gap: 4px; }
       .mix-row label { font-size: 13px; }
@@ -2046,12 +2054,23 @@
             </datalist>
             <div class="mix-top-row">
               <div>
+                <label for="sessionGroup">第N組</label>
+                <select id="sessionGroup">
+                  <option value="1">第1組</option>
+                  <option value="2">第2組</option>
+                  <option value="3">第3組</option>
+                  <option value="4">第4組</option>
+                </select>
+              </div>
+              <div>
                 <div class="mix-options">
                   <span class="mix-options-title">是否混組</span>
                   <label><input type="radio" name="mixedGroup" id="mixedNo" value="no" checked> 否</label>
                   <label><input type="radio" name="mixedGroup" id="mixedYes" value="yes"> 是</label>
                 </div>
               </div>
+            </div>
+            <div class="mix-control-row">
               <div>
                 <label for="defaultCourseGroup">預設課表組</label>
                 <select id="defaultCourseGroup">
@@ -3462,6 +3481,11 @@
       return Math.max(1, Math.min(COURSE_GROUPS.length, Number(el("defaultCourseGroup")?.value) || 1));
     }
 
+    function sessionGroupLabel() {
+      const value = Math.max(1, Math.min(9, Number(el("sessionGroup")?.value) || 1));
+      return `第${value}組`;
+    }
+
     function collectMixRowDrafts() {
       const rows = [];
       document.querySelectorAll("#mixRows .mix-row").forEach((row, index) => {
@@ -3676,7 +3700,7 @@
       el("summaryTable").innerHTML = `
         <thead>
           <tr>
-            <th>出發序</th><th>課表組</th><th>課表內容</th><th>含休</th>
+            <th>組</th><th>出發序</th><th>課表組</th><th>課表內容</th><th>含休</th>
             <th>姓名</th>
             ${Array.from({ length: maxTrips }, (_, i) => `<th>第${i + 1}趟成績</th>`).join("")}
             <th>完成</th><th>PB</th><th>PB趟次</th><th>最新</th><th>進步</th><th>平均</th>
@@ -3702,6 +3726,7 @@
               `<option value="${row.group}"${meta.courseGroup === row.group ? " selected" : ""}>${row.groupLabel}</option>`
             ).join("");
             return `<tr>
+              <td>${escapeHtml(sessionGroupLabel())}</td>
               <td><input class="person-order-input" data-person-order="${escapeHtml(name)}" type="number" min="1" value="${escapeHtml(meta.personOrder)}"></td>
               <td><select class="course-group-select" data-course-group="${escapeHtml(name)}">${courseOptions}</select></td>
               <td>${escapeHtml(meta.item)}</td>
@@ -3740,7 +3765,7 @@
               <td class="${metrics.improvement > 0 ? "metric-good" : "metric-muted"}">${metrics.improvement === "" ? "" : (metrics.improvement > 0 ? `+${metrics.improvement}秒` : `${metrics.improvement}秒`)}</td>
               <td>${fmt(avg)}</td>
             </tr>`;
-          }).join("") : `<tr><td colspan="17">尚未整理。把口令貼到左邊後按「整理」。</td></tr>`}
+          }).join("") : `<tr><td colspan="18">尚未整理。把口令貼到左邊後按「整理」。</td></tr>`}
         </tbody>`;
 
       el("summaryTable").querySelectorAll("[data-person-order]").forEach((input) => {
@@ -4115,6 +4140,9 @@
     }));
     el("defaultCourseGroup")?.addEventListener("change", () => {
       renderMixRows();
+      if (state.entries.length) render();
+    });
+    el("sessionGroup")?.addEventListener("change", () => {
       if (state.entries.length) render();
     });
     ["laneAStudents", "laneAWorkout", "laneBStudents", "laneBWorkout"].forEach((id) => {
