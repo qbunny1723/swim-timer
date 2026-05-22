@@ -3251,9 +3251,11 @@
           break;
         }
       }
+      parseState._suppressClear = true;
       box.value = text.replace(/[，,、;；\s]+$/g, "").replace(/^[，,、;；\s]+/g, "");
       clearParsePreview();
       runCommandPreview();
+      setTimeout(() => { parseState._suppressClear = false; }, 250);
       setStatus(`已刪除非口令文字：${item.rawName}`, "good");
     }
 
@@ -3802,7 +3804,7 @@
     if (commandBox && charCount) {
       commandBox.addEventListener("input", () => {
         charCount.textContent = `${commandBox.value.length} / 300`;
-        if (parseState.items.length || parseState.issues.length) clearParsePreview();
+        if (!parseState._suppressClear && (parseState.items.length || parseState.issues.length)) clearParsePreview();
       });
     }
 
