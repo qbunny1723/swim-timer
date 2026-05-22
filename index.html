@@ -1222,6 +1222,67 @@
       min-height: 220px;
     }
 
+    .parse-preview {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--panel), var(--accent-soft) 14%);
+      overflow: hidden;
+    }
+
+    .parse-preview[hidden] { display: none; }
+
+    .parse-preview-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      font-weight: 850;
+    }
+
+    .parse-preview-count {
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .parse-preview-table {
+      display: grid;
+      grid-template-columns: minmax(86px, 1.05fr) minmax(50px, .58fr) minmax(54px, .62fr) minmax(86px, 1.05fr) minmax(70px, .8fr);
+      overflow-x: auto;
+    }
+
+    .parse-preview-table > div {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--line);
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .parse-preview-table .th {
+      color: var(--muted);
+      background: color-mix(in srgb, var(--accent-soft), transparent 28%);
+      font-size: 12px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .parse-method {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .parse-preview-hint {
+      padding: 9px 12px 12px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
     .btn-stop-theme {
       background: var(--btn-stop-bg) !important;
       color: var(--btn-stop-color) !important;
@@ -1899,9 +1960,17 @@
           </div>
           <div class="extra-btns">
             <button id="clearTextBtn" class="secondary">🧹 清空文字</button>
-            <button id="focusInputBtn" class="btn-focus-input">⌨ 繼續輸入</button>
+            <button id="focusInputBtn" class="btn-focus-input">解析</button>
             <button id="loadExampleBtn" class="btn-example">📄 載入範例</button>
           </div>
+          <section id="parsePreview" class="parse-preview" hidden>
+            <div class="parse-preview-head">
+              <span>解析結果</span>
+              <span id="parsePreviewCount" class="parse-preview-count">0 筆</span>
+            </div>
+            <div id="parsePreviewTable" class="parse-preview-table"></div>
+            <div class="parse-preview-hint">解析只先拆口令並判定姓名，確認無誤後再按「整理」。</div>
+          </section>
           <div id="status" class="status">可以用手機/電腦鍵盤的語音輸入一直講，最後按整理。Chrome/Edge 可試用「開始語音」。</div>
         </div>
       </section>
@@ -2118,6 +2187,7 @@
     const SNAPSHOT_KEY = "swimTimerSnapshots";
     const maxTrips = 6;
     const state = { entries: [], issues: [] };
+    const parseState = { source: "", items: [], issues: [] };
     let snapshots = [];
     let recognition = null;
     let listening = false;
@@ -2629,6 +2699,52 @@
       return alias ? alias.name : rawName;
     }
 
+    function levDistance(a, b) {
+      const m = a.length;
+      const n = b.length;
+      const dp = Array.from({ length: m + 1 }, (_, i) => Array.from({ length: n + 1 }, (_, j) => (i ? 0 : j)));
+      for (let i = 0; i <= m; i++) dp[i][0] = i;
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          dp[i][j] = a[i - 1] === b[j - 1]
+            ? dp[i - 1][j - 1]
+            : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+        }
+      }
+      return dp[m][n];
+    }
+
+    function similarityScore(a, b) {
+      if (!a || !b) return 0;
+      if (a === b) return 100;
+      return Math.round((1 - levDistance(a, b) / Math.max(a.length, b.length)) * 100);
+    }
+
+    function resolveParsedName(rawName) {
+      const cleaned = String(rawName || "").trim();
+      const token = nameTokens().find((item) => cleaned === item.token || cleaned.endsWith(item.token));
+      if (token) {
+        return { name: token.name, method: token.name === cleaned ? "完全符合" : "小名", score: 100 };
+      }
+      const correction = corrections().find((item) => item.wrong === cleaned || cleaned.endsWith(item.wrong));
+      if (correction) {
+        return { name: correction.right, method: "校正", score: 100 };
+      }
+      let best = null;
+      let bestScore = 0;
+      for (const item of nameTokens()) {
+        const score = similarityScore(cleaned, item.token);
+        if (score > bestScore) {
+          bestScore = score;
+          best = item;
+        }
+      }
+      if (best && bestScore >= 70) {
+        return { name: best.name, method: "模糊", score: bestScore };
+      }
+      return { name: cleaned, method: "未辨識", score: bestScore };
+    }
+
     function normalizeText(text) {
       return applyCorrections(text)
         .replace(/[，、。；;｜|]/g, ",")
@@ -2794,7 +2910,124 @@
       return action === "出發" ? "出發" : "回來";
     }
 
+    function previewDigits(raw) {
+      const map = {
+        "零": "0", "〇": "0", "○": "0",
+        "一": "1", "壹": "1",
+        "二": "2", "貳": "2", "兩": "2",
+        "三": "3", "參": "3",
+        "四": "4", "肆": "4",
+        "五": "5", "伍": "5",
+        "六": "6", "陸": "6",
+        "七": "7", "柒": "7",
+        "八": "8", "捌": "8",
+        "九": "9", "玖": "9",
+      };
+      return String(raw || "").replace(/[零〇○一壹二貳兩三參四肆五伍六陸七柒八捌九玖]/g, (ch) => map[ch] || ch);
+    }
+
+    function parseCommandPreview(text) {
+      const normalized = previewDigits(String(text || ""))
+        .replace(/請整理|整理/g, ",")
+        .replace(/[，,、;；\n\r]+/g, ",")
+        .replace(/\s+/g, "");
+      const items = [];
+      const issues = [];
+      const re = /(.+?)(\d{1,4})(出發|回來)/g;
+      let match;
+      while ((match = re.exec(normalized)) !== null) {
+        const rawName = match[1].replace(/^[,，、;；]+/, "");
+        const timeRaw = match[2];
+        const action = match[3];
+        const resolved = resolveParsedName(rawName);
+        items.push({
+          raw: match[0],
+          rawName,
+          name: resolved.name,
+          method: resolved.method,
+          score: resolved.score,
+          timeRaw,
+          action,
+        });
+      }
+      if (!items.length && normalized) {
+        issues.push({ raw: normalized, issue: "無法拆成「姓名 + 時間 + 出發/回來」" });
+      }
+      return { items, issues };
+    }
+
+    function renderParsePreview() {
+      const box = el("parsePreview");
+      const table = el("parsePreviewTable");
+      const count = el("parsePreviewCount");
+      if (!box || !table || !count) return;
+      if (!parseState.items.length && !parseState.issues.length) {
+        box.hidden = true;
+        table.innerHTML = "";
+        count.textContent = "0 筆";
+        return;
+      }
+      box.hidden = false;
+      count.textContent = `${parseState.items.length} 筆`;
+      const rows = parseState.items.map((item) => `
+        <div>${escapeHtml(item.rawName)}</div>
+        <div>${escapeHtml(item.timeRaw)}</div>
+        <div>${escapeHtml(item.action)}</div>
+        <div>${escapeHtml(item.name)}</div>
+        <div class="parse-method">${escapeHtml(item.method)}${item.method === "模糊" ? ` ${item.score}%` : ""}</div>
+      `).join("");
+      const issues = parseState.issues.map((item) => `
+        <div>${escapeHtml(item.raw)}</div><div>-</div><div>-</div><div>-</div><div class="parse-method">${escapeHtml(item.issue)}</div>
+      `).join("");
+      table.innerHTML = `
+        <div class="th">原始姓名</div>
+        <div class="th">時間</div>
+        <div class="th">動作</div>
+        <div class="th">判定姓名</div>
+        <div class="th">方式</div>
+        ${rows}${issues}
+      `;
+    }
+
+    function runCommandPreview() {
+      const source = el("commandBox").value;
+      const result = parseCommandPreview(source);
+      parseState.source = source;
+      parseState.items = result.items;
+      parseState.issues = result.issues;
+      renderParsePreview();
+      setStatus(`解析完成：${parseState.items.length} 筆。確認無誤後可按「整理」。`, parseState.issues.length ? "bad" : "good");
+    }
+
+    function clearParsePreview() {
+      parseState.source = "";
+      parseState.items = [];
+      parseState.issues = [];
+      renderParsePreview();
+    }
+
+    function parsedEntriesFromPreview() {
+      state.entries = [];
+      state.issues = parseState.issues.slice();
+      for (const item of parseState.items) {
+        const parsedTime = parseTime(item.timeRaw);
+        if (!parsedTime) {
+          state.issues.push({ raw: item.raw, issue: `時間無法判讀：${item.timeRaw}` });
+          continue;
+        }
+        addEntry(item.name, item.action, parsedTime, item.raw, false, parseDeduct(item.timeRaw));
+      }
+      render();
+      const ok = state.entries.length;
+      const bad = state.issues.length;
+      setStatus(`整理完成：${ok} 筆成功${bad ? `，${bad} 筆提醒` : ""}。`, bad ? "bad" : "good");
+    }
+
     function parseAll() {
+      if (parseState.items.length && parseState.source === el("commandBox").value) {
+        parsedEntriesFromPreview();
+        return;
+      }
       state.entries = [];
       state.issues = [];
       const commands = splitCommands(el("commandBox").value);
@@ -3194,7 +3427,11 @@
     });
 
     el("parseBtn").addEventListener("click", parseAll);
-    el("clearTextBtn").addEventListener("click", () => { el("commandBox").value = ""; setStatus("已清空文字。"); });
+    el("clearTextBtn").addEventListener("click", () => {
+      el("commandBox").value = "";
+      clearParsePreview();
+      setStatus("已清空文字。");
+    });
     el("loadExampleBtn").addEventListener("click", () => {
       el("commandBox").value = "林小福000出發，方小美005出發，王小明010出發，林小福110回來，方小美120回來，王小明130回來，請整理";
       const charCount = el("charCount");
@@ -3279,10 +3516,7 @@
       }
     });
 
-    el("focusInputBtn").addEventListener("click", () => {
-      el("commandBox").focus();
-      setStatus("游標已回到口令文字框，可以繼續語音輸入。", "good");
-    });
+    el("focusInputBtn").addEventListener("click", runCommandPreview);
 
     el("manualAddBtn").addEventListener("click", () => {
       const name = el("manualName").value.trim();
@@ -3309,6 +3543,7 @@
     if (commandBox && charCount) {
       commandBox.addEventListener("input", () => {
         charCount.textContent = `${commandBox.value.length} / 300`;
+        if (parseState.items.length || parseState.issues.length) clearParsePreview();
       });
     }
 
