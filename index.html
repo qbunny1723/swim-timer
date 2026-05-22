@@ -3041,6 +3041,22 @@
         .replace(/\s+/g, "");
       const items = [];
       const issues = [];
+      const mergeSlowSpeechSegments = (segments) => {
+        const merged = [];
+        for (let i = 0; i < segments.length; i++) {
+          const current = segments[i];
+          const next = segments[i + 1] || "";
+          const currentLooksLikeName = current && !/\d/.test(current) && resolveParsedName(current).method !== "未辨識";
+          const nextLooksLikeTimeAction = /^(\d{1,4}(出發|回來)|(出發|回來)\d{1,4})$/.test(next);
+          if (currentLooksLikeName && nextLooksLikeTimeAction) {
+            merged.push(`${current}${next}`);
+            i++;
+          } else {
+            merged.push(current);
+          }
+        }
+        return merged;
+      };
       const pushItem = (raw, rawName, timeRaw = "-", action = "-") => {
         const name = String(rawName || "").replace(/^[,，、;；]+|[,，、;；]+$/g, "").trim();
         if (!name) return;
@@ -3055,7 +3071,8 @@
           action,
         });
       };
-      for (const segment of normalized.split(",").filter(Boolean)) {
+      const segments = mergeSlowSpeechSegments(normalized.split(",").filter(Boolean));
+      for (const segment of segments) {
         let matched = false;
         const re = /(.+?)(?:(\d{1,4})(出發|回來)|(出發|回來)(\d{1,4}))/g;
         let match;
