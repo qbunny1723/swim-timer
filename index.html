@@ -775,6 +775,13 @@
       text-underline-offset: 3px;
     }
 
+    .person-order-input {
+      width: 56px;
+      padding: 6px 7px;
+      text-align: center;
+      font-weight: 850;
+    }
+
     .dialog-backdrop {
       position: fixed;
       inset: 0;
@@ -2215,7 +2222,7 @@
     const LANE_PLAN_KEY = "swimTimerLanePlan";
     const SNAPSHOT_KEY = "swimTimerSnapshots";
     const maxTrips = 6;
-    const state = { entries: [], issues: [] };
+    const state = { entries: [], issues: [], summaryMetaOverrides: {} };
     const parseState = { source: "", items: [], issues: [] };
     let snapshots = [];
     let recognition = null;
@@ -3280,6 +3287,7 @@
     function parsedEntriesFromPreview() {
       state.entries = [];
       state.issues = parseState.issues.slice();
+      state.summaryMetaOverrides = {};
       for (const item of parseState.items) {
         if (!item.timeRaw || item.timeRaw === "-" || !item.action || item.action === "-") continue;
         const parsedTime = parseTime(item.timeRaw);
@@ -3291,6 +3299,7 @@
       }
       render();
       setParsePreviewCollapsed(true);
+      checkCourseIntervals();
       const ok = state.entries.length;
       const bad = state.issues.length;
       setStatus(`整理完成：${ok} 筆成功${bad ? `，${bad} 筆提醒` : ""}。`, bad ? "bad" : "good");
@@ -3303,6 +3312,7 @@
       }
       state.entries = [];
       state.issues = [];
+      state.summaryMetaOverrides = {};
       const commands = splitCommands(el("commandBox").value);
       for (const command of commands) {
         if (command.error) {
@@ -3318,6 +3328,7 @@
       }
       render();
       setParsePreviewCollapsed(true);
+      checkCourseIntervals();
       const ok = state.entries.length;
       const bad = state.issues.length;
       setStatus(`已整理 ${ok} 筆紀錄${bad ? `，有 ${bad} 筆需要確認` : ""}。`, bad ? "bad" : "good");
@@ -3354,6 +3365,73 @@
         }
         return { name, trips };
       });
+    }
+
+    function mixPlanRows() {
+      const count = el("mixedYes")?.checked
+        ? Math.max(2, Math.min(8, Number(el("mixCount")?.value) || 2))
+        : 1;
+      return Array.from({ length: count }, (_, index) => {
+        const item = el(`mixItem${index}`)?.value.trim() || `項目${index + 1}`;
+        const timeRaw = el(`mixTime${index}`)?.value.trim() || "";
+        const intervalRaw = el(`mixInterval${index}`)?.value.trim() || "";
+        return {
+          index,
+          item,
+          timeRaw,
+          time: parseTime(timeRaw),
+          intervalRaw,
+        };
+      });
+    }
+
+    function defaultPersonOrder(entries = state.entries) {
+      const starts = entries
+        .filter((entry) => entry.action === "出發")
+        .map((entry) => ({ name: entry.name, total: entryTotal(entry) }))
+        .filter((entry) => Number.isFinite(entry.total))
+        .sort((a, b) => a.total - b.total);
+      const map = {};
+      for (const start of starts) {
+        if (!map[start.name]) map[start.name] = Object.keys(map).length + 1;
+      }
+      return map;
+    }
+
+    function summaryMetaForName(name, entries = state.entries) {
+      const defaults = defaultPersonOrder(entries);
+      const personOrder = Number(state.summaryMetaOverrides[name]?.personOrder || defaults[name] || "");
+      const plan = mixPlanRows();
+      const planIndex = personOrder && plan.length ? (personOrder - 1) % plan.length : 0;
+      const planRow = plan[planIndex] || {};
+      return {
+        personOrder: personOrder || "",
+        item: planRow.item || "",
+        timeRaw: planRow.timeRaw || "",
+        time: planRow.time || null,
+        planIndex,
+      };
+    }
+
+    function checkCourseIntervals() {
+      const plan = mixPlanRows();
+      if (!plan.some((row) => row.time)) return;
+      const groupedRows = grouped();
+      for (const { name, trips } of groupedRows) {
+        const meta = summaryMetaForName(name);
+        const expected = meta.time?.total;
+        const firstStart = entryTotal(trips[0]?.start);
+        const secondStart = entryTotal(trips[1]?.start);
+        if (!Number.isFinite(expected) || !Number.isFinite(firstStart) || !Number.isFinite(secondStart)) continue;
+        const actual = secondStart - firstStart;
+        if (actual <= 0 || actual === expected) continue;
+        const confirmed = confirm(`${name}：${meta.item || "項目"} 設定時間是 ${fmt(expected)}，但實際出發間隔是 ${fmt(actual)}。要把設定時間改成 ${fmt(actual)} 嗎？`);
+        if (confirmed) {
+          const input = el(`mixTime${meta.planIndex}`);
+          if (input) input.value = `${Math.floor(actual / 60)}${String(actual % 60).padStart(2, "0")}`;
+          render();
+        }
+      }
     }
 
     function swimmerMetrics(trips) {
@@ -3418,6 +3496,7 @@
       el("summaryTable").innerHTML = `
         <thead>
           <tr>
+            <th>第幾人</th><th>項目</th><th>時間</th>
             <th>姓名</th>
             ${Array.from({ length: maxTrips }, (_, i) => `<th>第${i + 1}趟成績</th>`).join("")}
             <th>完成</th><th>PB</th><th>PB趟次</th><th>最新</th><th>進步</th><th>平均</th>
@@ -3425,6 +3504,7 @@
         </thead>
         <tbody>
           ${rows.length ? rows.map(({ name, trips }) => {
+            const meta = summaryMetaForName(name);
             const results = trips.map((trip) => {
               if (!trip.back) return null;
               if (!trip.start && !(trip.back.deductSeconds || 0)) return null;
@@ -3438,6 +3518,9 @@
             const metrics = swimmerMetrics(trips);
             const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "";
             return `<tr>
+              <td><input class="person-order-input" data-person-order="${escapeHtml(name)}" type="number" min="1" value="${escapeHtml(meta.personOrder)}"></td>
+              <td>${escapeHtml(meta.item)}</td>
+              <td>${escapeHtml(meta.timeRaw)}</td>
               <td><strong>${escapeHtml(name)}</strong></td>
               ${trips.map((trip, i) => {
                 const result = results[i];
@@ -3466,8 +3549,17 @@
               <td class="${metrics.improvement > 0 ? "metric-good" : "metric-muted"}">${metrics.improvement === "" ? "" : (metrics.improvement > 0 ? `+${metrics.improvement}秒` : `${metrics.improvement}秒`)}</td>
               <td>${fmt(avg)}</td>
             </tr>`;
-          }).join("") : `<tr><td colspan="13">尚未整理。把口令貼到左邊後按「整理」。</td></tr>`}
+          }).join("") : `<tr><td colspan="16">尚未整理。把口令貼到左邊後按「整理」。</td></tr>`}
         </tbody>`;
+
+      el("summaryTable").querySelectorAll("[data-person-order]").forEach((input) => {
+        input.addEventListener("change", () => {
+          const name = input.dataset.personOrder;
+          state.summaryMetaOverrides[name] ||= {};
+          state.summaryMetaOverrides[name].personOrder = Number(input.value) || "";
+          render();
+        });
+      });
 
       const rawRows = state.entries.map((entry, index) => `
         <tr>
@@ -3763,6 +3855,12 @@
           if (!select.value || select.value === "custom") return;
           const input = el(`mixItem${select.dataset.mixItemSelect}`);
           if (input) input.value = select.value;
+          if (state.entries.length) render();
+        });
+      });
+      el("mixRows").querySelectorAll("input").forEach((input) => {
+        input.addEventListener("change", () => {
+          if (state.entries.length) render();
         });
       });
     }
@@ -3807,6 +3905,7 @@
       if (!confirm("確定清空整理結果？左邊口令文字會保留。")) return;
       state.entries = [];
       state.issues = [];
+      state.summaryMetaOverrides = {};
       render();
       setStatus("已清空整理結果。");
     });
@@ -3912,6 +4011,7 @@
       renderSnapshotList();
       state.entries = [];
       state.issues = [];
+      state.summaryMetaOverrides = {};
       el("commandBox").value = "";
       const charCount = el("charCount");
       if (charCount) charCount.textContent = "0 / 300";
@@ -3924,6 +4024,7 @@
       if (!snapshot) return;
       state.entries = snapshot.entries.map(cloneEntry);
       state.issues = snapshot.issues.slice();
+      state.summaryMetaOverrides = {};
       el("commandBox").value = snapshot.commandText || "";
       if (el("groupTitle")) el("groupTitle").value = snapshot.title || `第${index + 1}組`;
       if (el("resultDate")) el("resultDate").value = snapshot.date || new Date().toISOString().slice(0, 10);
