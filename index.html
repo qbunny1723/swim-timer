@@ -3018,22 +3018,34 @@
         .replace(/\s+/g, "");
       const items = [];
       const issues = [];
-      const re = /(.+?)(\d{1,4})(出發|回來)/g;
-      let match;
-      while ((match = re.exec(normalized)) !== null) {
-        const rawName = match[1].replace(/^[,，、;；]+/, "");
-        const timeRaw = match[2];
-        const action = match[3];
-        const resolved = resolveParsedName(rawName);
+      const pushItem = (raw, rawName, timeRaw = "-", action = "-") => {
+        const name = String(rawName || "").replace(/^[,，、;；]+|[,，、;；]+$/g, "").trim();
+        if (!name) return;
+        const resolved = resolveParsedName(name);
         items.push({
-          raw: match[0],
-          rawName,
+          raw,
+          rawName: name,
           name: resolved.name,
           method: resolved.method,
           score: resolved.score,
           timeRaw,
           action,
         });
+      };
+      for (const segment of normalized.split(",").filter(Boolean)) {
+        let matched = false;
+        const re = /(.+?)(?:(\d{1,4})(出發|回來)|(出發|回來)(\d{1,4}))/g;
+        let match;
+        while ((match = re.exec(segment)) !== null) {
+          matched = true;
+          const rawName = match[1];
+          const timeRaw = match[2] || match[5];
+          const action = match[3] || match[4];
+          pushItem(match[0], rawName, timeRaw, action);
+        }
+        if (!matched && segment) {
+          pushItem(segment, segment);
+        }
       }
       if (!items.length && normalized) {
         issues.push({ raw: normalized, issue: "無法拆成「姓名 + 時間 + 出發/回來」" });
@@ -3095,6 +3107,7 @@
       state.entries = [];
       state.issues = parseState.issues.slice();
       for (const item of parseState.items) {
+        if (!item.timeRaw || item.timeRaw === "-" || !item.action || item.action === "-") continue;
         const parsedTime = parseTime(item.timeRaw);
         if (!parsedTime) {
           state.issues.push({ raw: item.raw, issue: `時間無法判讀：${item.timeRaw}` });
