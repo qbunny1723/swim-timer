@@ -3116,21 +3116,20 @@
     }
 
     function parseCommandPreview(text) {
-      const normalized = previewDigits(String(text || ""))
-        .replace(/請整理|整理/g, ",")
-        .replace(/[，,、;；\n\r]+/g, ",")
-        .replace(/\s+/g, "");
       const items = [];
       const issues = [];
       const mergeSlowSpeechSegments = (segments) => {
         const merged = [];
         for (let i = 0; i < segments.length; i++) {
           const current = segments[i];
-          const next = segments[i + 1] || "";
-          const currentLooksLikeName = current && !/\d/.test(current) && resolveParsedName(current).method !== "未辨識";
-          const nextLooksLikeTimeAction = /^(\d{1,4}(出發|回來)|(出發|回來)\d{1,4})$/.test(next);
+          const next = segments[i + 1];
+          const currentLooksLikeName = current?.normalized && !/\d/.test(current.normalized) && resolveParsedName(current.normalized).method !== "未辨識";
+          const nextLooksLikeTimeAction = /^(\d{1,4}(出發|回來)|(出發|回來)\d{1,4})$/.test(next?.normalized || "");
           if (currentLooksLikeName && nextLooksLikeTimeAction) {
-            merged.push(`${current}${next}`);
+            merged.push({
+              raw: `${current.raw}${next.raw}`,
+              normalized: `${current.normalized}${next.normalized}`,
+            });
             i++;
           } else {
             merged.push(current);
@@ -3150,12 +3149,13 @@
         }
         return parts.length > 1 ? parts : [segment];
       };
-      const pushItem = (raw, rawName, timeRaw = "-", action = "-") => {
+      const pushItem = (raw, rawName, timeRaw = "-", action = "-", sourceText = "") => {
         const name = String(rawName || "").replace(/^[,，、;；]+|[,，、;；]+$/g, "").trim();
         if (!name) return;
         const resolved = resolveParsedName(name);
         items.push({
           raw,
+          sourceText,
           rawName: name,
           name: resolved.name,
           method: resolved.method,
@@ -3164,26 +3164,35 @@
           action,
         });
       };
-      const segments = mergeSlowSpeechSegments(normalized.split(",").filter(Boolean));
+      const originalSegments = String(text || "")
+        .replace(/請整理|整理/g, ",")
+        .split(/[，,、;；\n\r]+/)
+        .map((raw) => ({
+          raw: raw.trim(),
+          normalized: previewDigits(raw).replace(/\s+/g, ""),
+        }))
+        .filter((segment) => segment.normalized);
+      const segments = mergeSlowSpeechSegments(originalSegments);
       for (const segment of segments) {
         let matched = false;
         const re = /(.+?)(?:(\d{1,4})(出發|回來)|(出發|回來)(\d{1,4}))/g;
         let match;
-        while ((match = re.exec(segment)) !== null) {
+        while ((match = re.exec(segment.normalized)) !== null) {
           matched = true;
           const rawName = match[1];
           const timeRaw = match[2] || match[5];
           const action = match[3] || match[4];
-          pushItem(match[0], rawName, timeRaw, action);
+          pushItem(match[0], rawName, timeRaw, action, segment.raw);
         }
-        if (!matched && segment) {
-          for (const namePart of splitByRoster(segment)) {
-            pushItem(namePart, namePart);
+        if (!matched && segment.normalized) {
+          for (const namePart of splitByRoster(segment.normalized)) {
+            pushItem(namePart, namePart, "-", "-", segment.raw);
           }
         }
       }
-      if (!items.length && normalized) {
-        issues.push({ raw: normalized, issue: "無法拆成「姓名 + 時間 + 出發/回來」" });
+      if (!items.length && originalSegments.length) {
+        const raw = originalSegments.map((segment) => segment.raw).join("，");
+        issues.push({ raw, sourceText: raw, issue: "無法拆成「姓名 + 時間 + 出發/回來」" });
       }
       return { items, issues };
     }
@@ -3220,8 +3229,8 @@
         <div class="parse-method">${methodCell}</div>
       `;
       }).join("");
-      const issues = parseState.issues.map((item) => `
-        <div>${escapeHtml(item.raw)}</div><div>-</div><div>-</div><div>-</div><div class="parse-method">${escapeHtml(item.issue)}</div>
+      const issues = parseState.issues.map((item, index) => `
+        <div>${escapeHtml(item.raw)}</div><div>-</div><div>-</div><div>-</div><div class="parse-method">${escapeHtml(item.issue)}<br><button class="parse-delete-btn" type="button" data-parse-issue-delete="${index}">刪除</button></div>
       `).join("");
       table.innerHTML = `
         <div class="th">原始姓名</div>
@@ -3236,6 +3245,9 @@
       });
       table.querySelectorAll("[data-parse-delete]").forEach((button) => {
         button.addEventListener("click", () => removeParsedRawText(Number(button.dataset.parseDelete)));
+      });
+      table.querySelectorAll("[data-parse-issue-delete]").forEach((button) => {
+        button.addEventListener("click", () => removeParsedIssueText(Number(button.dataset.parseIssueDelete)));
       });
     }
 
@@ -3313,14 +3325,28 @@
       const item = parseState.items[index];
       const box = el("commandBox");
       if (!item || !box) return;
-      const candidates = [item.raw, item.rawName].filter(Boolean).sort((a, b) => b.length - a.length);
+      removeTextCandidate([item.sourceText, item.raw, item.rawName], box);
+      setStatus(`已刪除非口令文字：${item.rawName}`, "good");
+    }
+
+    function removeParsedIssueText(index) {
+      const item = parseState.issues[index];
+      const box = el("commandBox");
+      if (!item || !box) return;
+      removeTextCandidate([item.sourceText, item.raw], box);
+      setStatus(`已刪除無法解析文字：${item.raw}`, "good");
+    }
+
+    function removeTextCandidate(candidates, box) {
+      const cleanCandidates = candidates.filter(Boolean).sort((a, b) => b.length - a.length);
       let text = box.value;
-      for (const candidate of candidates) {
+      for (const candidate of cleanCandidates) {
         const pattern = new RegExp(`(^|[，,、;；\\s]+)${escapeRegExp(candidate)}([，,、;；\\s]+|$)`);
         if (pattern.test(text)) {
           text = text.replace(pattern, (match, before, after) => {
             if (!before && !after) return "";
-            if (!before || !after) return "";
+            if (!before) return after.replace(/^[，,、;；\s]+/, "");
+            if (!after) return before.replace(/[，,、;；\s]+$/, "");
             return before;
           });
           break;
@@ -3335,7 +3361,6 @@
       clearParsePreview();
       runCommandPreview();
       setTimeout(() => { parseState._suppressClear = false; }, 250);
-      setStatus(`已刪除非口令文字：${item.rawName}`, "good");
     }
 
     function clearParsePreview() {
