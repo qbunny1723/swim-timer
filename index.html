@@ -1292,6 +1292,18 @@
       cursor: pointer;
     }
 
+    .parse-delete-btn {
+      border: 1px solid color-mix(in srgb, var(--danger), transparent 42%);
+      background: color-mix(in srgb, var(--danger), transparent 88%);
+      color: var(--danger);
+      min-height: 0;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
     .parse-preview-hint {
       padding: 9px 12px 12px;
       color: var(--muted);
@@ -3125,12 +3137,16 @@
         const rawNameCell = needsCorrection
           ? `<button class="parse-correct-btn" type="button" data-parse-correct="${index}">${escapeHtml(item.rawName)}</button>`
           : escapeHtml(item.rawName);
+        const methodText = `${escapeHtml(item.method)}${["模糊", "注音模糊"].includes(item.method) ? ` ${item.score}%` : ""}`;
+        const methodCell = item.method === "未辨識"
+          ? `${methodText}<br><button class="parse-delete-btn" type="button" data-parse-delete="${index}">刪除</button>`
+          : methodText;
         return `
         <div>${rawNameCell}</div>
         <div>${escapeHtml(item.timeRaw)}</div>
         <div>${escapeHtml(item.action)}</div>
         <div>${escapeHtml(item.name)}</div>
-        <div class="parse-method">${escapeHtml(item.method)}${["模糊", "注音模糊"].includes(item.method) ? ` ${item.score}%` : ""}</div>
+        <div class="parse-method">${methodCell}</div>
       `;
       }).join("");
       const issues = parseState.issues.map((item) => `
@@ -3146,6 +3162,9 @@
       `;
       table.querySelectorAll("[data-parse-correct]").forEach((button) => {
         button.addEventListener("click", () => openCorrectionDialog(Number(button.dataset.parseCorrect)));
+      });
+      table.querySelectorAll("[data-parse-delete]").forEach((button) => {
+        button.addEventListener("click", () => removeParsedRawText(Number(button.dataset.parseDelete)));
       });
     }
 
@@ -3209,6 +3228,33 @@
           setStatus(`已加入校正：${item.rawName} → ${selected}。記得按「儲存」同步到雲端。`, "good");
         }
       });
+    }
+
+    function removeParsedRawText(index) {
+      const item = parseState.items[index];
+      const box = el("commandBox");
+      if (!item || !box) return;
+      const candidates = [item.raw, item.rawName].filter(Boolean).sort((a, b) => b.length - a.length);
+      let text = box.value;
+      for (const candidate of candidates) {
+        const pattern = new RegExp(`(^|[，,、;；\\s]+)${escapeRegExp(candidate)}([，,、;；\\s]+|$)`);
+        if (pattern.test(text)) {
+          text = text.replace(pattern, (match, before, after) => {
+            if (!before && !after) return "";
+            if (!before || !after) return "";
+            return before;
+          });
+          break;
+        }
+        if (text.includes(candidate)) {
+          text = text.replace(candidate, "");
+          break;
+        }
+      }
+      box.value = text.replace(/[，,、;；\s]+$/g, "").replace(/^[，,、;；\s]+/g, "");
+      clearParsePreview();
+      runCommandPreview();
+      setStatus(`已刪除非口令文字：${item.rawName}`, "good");
     }
 
     function clearParsePreview() {
