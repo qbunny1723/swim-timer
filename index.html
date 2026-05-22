@@ -1276,6 +1276,22 @@
       white-space: nowrap;
     }
 
+    .parse-correct-btn {
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-weight: 850;
+      padding: 0 0 2px;
+      min-height: 0;
+      text-align: left;
+      text-decoration: underline;
+      text-decoration-thickness: 2px;
+      text-underline-offset: 5px;
+      text-decoration-color: color-mix(in srgb, var(--accent), transparent 15%);
+      cursor: pointer;
+    }
+
     .parse-preview-hint {
       padding: 9px 12px 12px;
       color: var(--muted);
@@ -3073,13 +3089,19 @@
       }
       box.hidden = false;
       count.textContent = `${parseState.items.length} 筆`;
-      const rows = parseState.items.map((item) => `
-        <div>${escapeHtml(item.rawName)}</div>
+      const rows = parseState.items.map((item, index) => {
+        const needsCorrection = item.method !== "完全符合" || item.rawName !== item.name;
+        const rawNameCell = needsCorrection
+          ? `<button class="parse-correct-btn" type="button" data-parse-correct="${index}">${escapeHtml(item.rawName)}</button>`
+          : escapeHtml(item.rawName);
+        return `
+        <div>${rawNameCell}</div>
         <div>${escapeHtml(item.timeRaw)}</div>
         <div>${escapeHtml(item.action)}</div>
         <div>${escapeHtml(item.name)}</div>
         <div class="parse-method">${escapeHtml(item.method)}${["模糊", "注音模糊"].includes(item.method) ? ` ${item.score}%` : ""}</div>
-      `).join("");
+      `;
+      }).join("");
       const issues = parseState.issues.map((item) => `
         <div>${escapeHtml(item.raw)}</div><div>-</div><div>-</div><div>-</div><div class="parse-method">${escapeHtml(item.issue)}</div>
       `).join("");
@@ -3091,6 +3113,9 @@
         <div class="th">方式</div>
         ${rows}${issues}
       `;
+      table.querySelectorAll("[data-parse-correct]").forEach((button) => {
+        button.addEventListener("click", () => openCorrectionDialog(Number(button.dataset.parseCorrect)));
+      });
     }
 
     function runCommandPreview() {
@@ -3101,6 +3126,58 @@
       parseState.issues = result.issues;
       renderParsePreview();
       setStatus(`解析完成：${parseState.items.length} 筆。確認無誤後可按「整理」。`, parseState.issues.length ? "bad" : "good");
+    }
+
+    function addCorrectionAlias(rightName, wrongName) {
+      const right = String(rightName || "").trim();
+      const wrong = String(wrongName || "").replace(/[0-9０-９]+$/g, "").trim();
+      const box = el("correctionBox");
+      if (!right || !wrong || right === wrong || !box) return false;
+      const lines = box.value.split(/\n/);
+      let found = false;
+      const next = lines.map((line) => {
+        if (!line.trim() || !line.includes("=")) return line;
+        const eqIndex = line.indexOf("=");
+        const currentRight = line.slice(0, eqIndex).trim();
+        if (currentRight !== right) return line;
+        found = true;
+        const wrongs = splitAliasList(line.slice(eqIndex + 1));
+        if (!wrongs.includes(wrong)) wrongs.push(wrong);
+        return `${right}=${wrongs.join(",")}`;
+      });
+      if (!found) next.push(`${right}=${wrong}`);
+      box.value = next.filter((line, index) => line.trim() || index < next.length - 1).join("\n").trim();
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+      return true;
+    }
+
+    function openCorrectionDialog(index) {
+      const item = parseState.items[index];
+      if (!item) return;
+      const dialog = el("detailDialog");
+      const title = el("detailTitle");
+      const content = el("detailContent");
+      if (!dialog || !title || !content) return;
+      title.textContent = "標記正確姓名";
+      const options = rosterNames().map((name) =>
+        `<option value="${escapeHtml(name)}"${name === item.name ? " selected" : ""}>${escapeHtml(name)}</option>`
+      ).join("");
+      content.innerHTML = `
+        <div class="dialog-row"><span>原始姓名</span><strong>${escapeHtml(item.rawName)}</strong></div>
+        <label for="correctionNameSelect" style="margin-top:12px;">正確姓名</label>
+        <select id="correctionNameSelect">${options}</select>
+        <p class="small">確認後會把「${escapeHtml(item.rawName)}」加入學生名單校正；按「儲存」才會同步到雲端。</p>
+        <button id="confirmCorrectionBtn" type="button" style="width:100%; margin-top:10px;">加入校正</button>
+      `;
+      dialog.classList.add("show");
+      el("confirmCorrectionBtn")?.addEventListener("click", () => {
+        const selected = el("correctionNameSelect")?.value || "";
+        if (addCorrectionAlias(selected, item.rawName)) {
+          dialog.classList.remove("show");
+          runCommandPreview();
+          setStatus(`已加入校正：${item.rawName} → ${selected}。記得按「儲存」同步到雲端。`, "good");
+        }
+      });
     }
 
     function clearParsePreview() {
