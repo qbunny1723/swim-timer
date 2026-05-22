@@ -782,6 +782,12 @@
       font-weight: 850;
     }
 
+    .course-group-select {
+      min-width: 72px;
+      padding: 6px 7px;
+      font-weight: 850;
+    }
+
     .dialog-backdrop {
       position: fixed;
       inset: 0;
@@ -902,7 +908,7 @@
 
     .mix-top-row {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 96px;
+      grid-template-columns: minmax(0, 1fr) 120px 96px;
       gap: 10px;
       align-items: end;
     }
@@ -944,8 +950,20 @@
 
     .mix-row {
       display: grid;
-      grid-template-columns: minmax(0, 1.25fr) minmax(0, .9fr) minmax(0, .9fr);
+      grid-template-columns: 58px minmax(0, 1.25fr) minmax(0, .9fr) minmax(0, .9fr);
       gap: 8px;
+    }
+
+    .mix-group-label {
+      display: grid;
+      place-items: center;
+      min-height: 40px;
+      border-radius: 7px;
+      background: var(--panel);
+      color: var(--accent);
+      font-weight: 950;
+      border: 1px solid var(--line);
+      align-self: end;
     }
 
     .mix-item-control {
@@ -1920,7 +1938,7 @@
       .lane-grid { grid-template-columns: 1fr; }
       .snapshot-actions { grid-template-columns: 1fr; }
       .mix-top-row { grid-template-columns: 1fr; }
-      .mix-row { grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr) minmax(0, .85fr); gap: 6px; }
+      .mix-row { grid-template-columns: 44px minmax(0, 1.15fr) minmax(0, .85fr) minmax(0, .85fr); gap: 6px; }
       .mix-item-control { grid-template-columns: minmax(0, 1fr) 58px; gap: 4px; }
       .mix-row label { font-size: 13px; }
       .mix-row input,
@@ -2002,8 +2020,17 @@
                   <label><input type="radio" name="mixedGroup" id="mixedYes" value="yes"> 是</label>
                 </div>
               </div>
+              <div>
+                <label for="defaultCourseGroup">預設課表組</label>
+                <select id="defaultCourseGroup">
+                  <option value="1">A</option>
+                  <option value="2">B</option>
+                  <option value="3">C</option>
+                  <option value="4">D</option>
+                </select>
+              </div>
               <div id="mixCountWrap" class="mix-count-wrap" hidden>
-                <label for="mixCount">幾組</label>
+                <label for="mixCount">課表組數</label>
                 <input id="mixCount" type="number" min="2" max="8" value="2">
               </div>
             </div>
@@ -3372,7 +3399,7 @@
         ? Math.max(2, Math.min(8, Number(el("mixCount")?.value) || 2))
         : 1;
       return Array.from({ length: count }, (_, index) => {
-        const item = el(`mixItem${index}`)?.value.trim() || `項目${index + 1}`;
+        const item = el(`mixItem${index}`)?.value.trim() || `課表內容${String.fromCharCode(65 + index)}`;
         const timeRaw = el(`mixTime${index}`)?.value.trim() || "";
         const intervalRaw = el(`mixInterval${index}`)?.value.trim() || "";
         return {
@@ -3402,10 +3429,13 @@
       const defaults = defaultPersonOrder(entries);
       const personOrder = Number(state.summaryMetaOverrides[name]?.personOrder || defaults[name] || "");
       const plan = mixPlanRows();
-      const planIndex = personOrder && plan.length ? (personOrder - 1) % plan.length : 0;
+      const overriddenGroup = state.summaryMetaOverrides[name]?.courseGroup;
+      const defaultGroup = Number(el("defaultCourseGroup")?.value || 1);
+      const planIndex = Math.max(0, Math.min(plan.length - 1, Number(overriddenGroup || defaultGroup || 1) - 1));
       const planRow = plan[planIndex] || {};
       return {
         personOrder: personOrder || "",
+        courseGroup: planIndex + 1,
         item: planRow.item || "",
         timeRaw: planRow.timeRaw || "",
         time: planRow.time || null,
@@ -3425,7 +3455,7 @@
         if (!Number.isFinite(expected) || !Number.isFinite(firstStart) || !Number.isFinite(secondStart)) continue;
         const actual = secondStart - firstStart;
         if (actual <= 0 || actual === expected) continue;
-        const confirmed = confirm(`${name}：${meta.item || "項目"} 設定時間是 ${fmt(expected)}，但實際出發間隔是 ${fmt(actual)}。要把設定時間改成 ${fmt(actual)} 嗎？`);
+        const confirmed = confirm(`${name}：${meta.item || "課表內容"} 設定含休是 ${fmt(expected)}，但實際出發間隔是 ${fmt(actual)}。要把含休改成 ${fmt(actual)} 嗎？`);
         if (confirmed) {
           const input = el(`mixTime${meta.planIndex}`);
           if (input) input.value = `${Math.floor(actual / 60)}${String(actual % 60).padStart(2, "0")}`;
@@ -3496,7 +3526,7 @@
       el("summaryTable").innerHTML = `
         <thead>
           <tr>
-            <th>第幾人</th><th>項目</th><th>時間</th>
+            <th>出發序</th><th>課表組</th><th>課表內容</th><th>含休</th>
             <th>姓名</th>
             ${Array.from({ length: maxTrips }, (_, i) => `<th>第${i + 1}趟成績</th>`).join("")}
             <th>完成</th><th>PB</th><th>PB趟次</th><th>最新</th><th>進步</th><th>平均</th>
@@ -3517,8 +3547,12 @@
             const personalRanks = personalRankMap(results);
             const metrics = swimmerMetrics(trips);
             const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "";
+            const courseOptions = mixPlanRows().map((_, index) =>
+              `<option value="${index + 1}"${meta.courseGroup === index + 1 ? " selected" : ""}>${String.fromCharCode(65 + index)}</option>`
+            ).join("");
             return `<tr>
               <td><input class="person-order-input" data-person-order="${escapeHtml(name)}" type="number" min="1" value="${escapeHtml(meta.personOrder)}"></td>
+              <td><select class="course-group-select" data-course-group="${escapeHtml(name)}">${courseOptions}</select></td>
               <td>${escapeHtml(meta.item)}</td>
               <td>${escapeHtml(meta.timeRaw)}</td>
               <td><strong>${escapeHtml(name)}</strong></td>
@@ -3549,7 +3583,7 @@
               <td class="${metrics.improvement > 0 ? "metric-good" : "metric-muted"}">${metrics.improvement === "" ? "" : (metrics.improvement > 0 ? `+${metrics.improvement}秒` : `${metrics.improvement}秒`)}</td>
               <td>${fmt(avg)}</td>
             </tr>`;
-          }).join("") : `<tr><td colspan="16">尚未整理。把口令貼到左邊後按「整理」。</td></tr>`}
+          }).join("") : `<tr><td colspan="17">尚未整理。把口令貼到左邊後按「整理」。</td></tr>`}
         </tbody>`;
 
       el("summaryTable").querySelectorAll("[data-person-order]").forEach((input) => {
@@ -3557,6 +3591,14 @@
           const name = input.dataset.personOrder;
           state.summaryMetaOverrides[name] ||= {};
           state.summaryMetaOverrides[name].personOrder = Number(input.value) || "";
+          render();
+        });
+      });
+      el("summaryTable").querySelectorAll("[data-course-group]").forEach((select) => {
+        select.addEventListener("change", () => {
+          const name = select.dataset.courseGroup;
+          state.summaryMetaOverrides[name] ||= {};
+          state.summaryMetaOverrides[name].courseGroup = Number(select.value) || 1;
           render();
         });
       });
@@ -3817,10 +3859,19 @@
       const mixed = el("mixedYes").checked;
       const count = mixed ? Math.max(2, Math.min(8, Number(el("mixCount").value) || 2)) : 1;
       el("mixCountWrap").hidden = !mixed;
+      const defaultCourseGroup = el("defaultCourseGroup");
+      if (defaultCourseGroup) {
+        const current = Math.max(1, Math.min(count, Number(defaultCourseGroup.value) || 1));
+        defaultCourseGroup.innerHTML = Array.from({ length: count }, (_, index) =>
+          `<option value="${index + 1}">${String.fromCharCode(65 + index)}</option>`
+        ).join("");
+        defaultCourseGroup.value = String(current);
+      }
       el("mixRows").innerHTML = Array.from({ length: count }, (_, index) => `
         <div class="mix-row">
+          <div class="mix-group-label">${String.fromCharCode(65 + index)}</div>
           <div>
-            <label for="mixItem${index}">項目${mixed ? ` ${index + 1}` : ""}</label>
+            <label for="mixItem${index}">課表內容</label>
             <div class="mix-item-control">
               <input id="mixItem${index}" type="text" placeholder="例：100自">
               <select data-mix-item-select="${index}" aria-label="常用項目">
@@ -3835,14 +3886,14 @@
             </div>
           </div>
           <div>
-            <label for="mixTime${index}">時間</label>
+            <label for="mixTime${index}">含休</label>
             <div class="mix-inline">
               <input id="mixTime${index}" type="text" inputmode="numeric" placeholder="150">
               <span class="mix-suffix">含休</span>
             </div>
           </div>
           <div>
-            <label for="mixInterval${index}">間隔</label>
+            <label for="mixInterval${index}">出發間隔</label>
             <div class="mix-inline">
               <input id="mixInterval${index}" type="text" inputmode="numeric" placeholder="5">
               <span class="mix-suffix">秒出發</span>
@@ -3865,6 +3916,9 @@
       });
     }
     ["mixedNo", "mixedYes", "mixCount"].forEach((id) => el(id).addEventListener("input", renderMixRows));
+    el("defaultCourseGroup")?.addEventListener("change", () => {
+      if (state.entries.length) render();
+    });
     ["laneAStudents", "laneAWorkout", "laneBStudents", "laneBWorkout"].forEach((id) => {
       el(id)?.addEventListener("input", saveLanePlanLocal);
       el(id)?.addEventListener("change", saveLanePlanLocal);
