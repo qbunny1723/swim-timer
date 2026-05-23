@@ -4808,11 +4808,14 @@
             ["日期", date, "組", sessionLabel, "課表組", groupLabel],
             ["課表內容", planRow.item || "", "當趟含休", planRow.timeRaw || "", "出發間隔", planRow.intervalRaw || ""],
             [],
+            ["原始語音輸入文字"],
+            [snapshot.commandText || ""],
+            [],
             headers,
             ...filteredRows,
           ],
         };
-      }).filter((block) => block.rows.length > 6);
+      }).filter((block) => block.rows.length > 8);
     }
 
     function snapshotSummaryOnlyRows(snapshot) {
@@ -4861,6 +4864,8 @@
     }
 
     async function uploadSnapshotsToDrive() {
+      const uploadBtn = el("uploadSnapshotsBtn");
+      const originalText = uploadBtn?.textContent || "上傳備份";
       if (!snapshots.length) {
         setStatus("目前沒有暫存紀錄可以上傳備份。", "bad");
         return;
@@ -4879,6 +4884,10 @@
         setStatus("目前沒有可上傳備份的暫存整理表。", "bad");
         return;
       }
+      if (uploadBtn) {
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = "上傳中...";
+      }
       setStatus(`正在上傳 ${blockCount} 筆備份區塊...`, "good");
       try {
         for (const [date, blocks] of blocksByDate) {
@@ -4889,9 +4898,18 @@
           });
           if (!result || !result.ok) throw new Error("save failed");
         }
+        if (uploadBtn) uploadBtn.textContent = "已上傳 ✓";
         setStatus(`已上傳 ${blockCount} 筆備份；同日期同組別課表會更新舊資料。`, "good");
       } catch {
+        if (uploadBtn) uploadBtn.textContent = "上傳失敗";
         setStatus("備份上傳失敗：請確認已部署新版 Apps Script。", "bad");
+      } finally {
+        if (uploadBtn) {
+          setTimeout(() => {
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = originalText;
+          }, 1500);
+        }
       }
     }
 
