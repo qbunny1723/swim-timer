@@ -4844,15 +4844,79 @@
       });
     }
 
+    function summaryRowMap(headers, row) {
+      const map = {};
+      headers.forEach((header, index) => {
+        map[header] = row[index] ?? "";
+      });
+      return map;
+    }
+
+    function sessionNumber(value) {
+      const match = String(value || "").match(/\d+/);
+      return match ? Number(match[0]) : 999;
+    }
+
+    function courseGroupOrder(value) {
+      const label = String(value || "").trim().toUpperCase();
+      const index = COURSE_GROUPS.indexOf(label);
+      return index >= 0 ? index : 999;
+    }
+
+    function normalizedDailySectionRows(section) {
+      const baseHeaders = ["組", "出發序", "課表組", "課表內容", "含休", "姓名"];
+      const metricHeaders = ["完成", "PB", "PB趟次", "最新", "進步", "平均"];
+      const maxTrips = Math.max(0, ...section.records.map((record) => record.tripCount));
+      const headers = [
+        ...baseHeaders,
+        ...Array.from({ length: maxTrips }, (_, index) => `第${index + 1}趟成績`),
+        ...metricHeaders,
+      ];
+      const sortedRecords = section.records.slice().sort((a, b) => {
+        const groupDiff = courseGroupOrder(a.map["課表組"]) - courseGroupOrder(b.map["課表組"]);
+        if (groupDiff) return groupDiff;
+        const orderDiff = (Number(a.map["出發序"]) || 999) - (Number(b.map["出發序"]) || 999);
+        if (orderDiff) return orderDiff;
+        return String(a.map["姓名"] || "").localeCompare(String(b.map["姓名"] || ""), "zh-Hant");
+      });
+      const bodyRows = sortedRecords.map((record) => [
+        ...baseHeaders.map((header) => record.map[header] || ""),
+        ...Array.from({ length: maxTrips }, (_, index) => record.map[`第${index + 1}趟成績`] || ""),
+        ...metricHeaders.map((header) => record.map[header] || ""),
+      ]);
+      return [
+        [section.date, section.session],
+        headers,
+        ...bodyRows,
+        [],
+        [],
+      ];
+    }
+
     function dailySummaryRows(fallbackDate) {
-      const rows = [];
+      const sections = new Map();
       for (const snapshot of snapshots) {
         const summaryRows = snapshotSummaryOnlyRows(snapshot);
-        if (!summaryRows.length) continue;
-        rows.push([snapshot.date || fallbackDate, snapshot.title || "未命名組別"]);
-        rows.push(...summaryRows, [], []);
+        if (summaryRows.length <= 1) continue;
+        const [headers, ...bodyRows] = summaryRows;
+        const tripCount = headers.filter((header) => /^第\d+趟成績$/.test(String(header))).length;
+        const date = snapshot.date || fallbackDate;
+        bodyRows.forEach((row) => {
+          if (!Array.isArray(row) || !row.some((cell) => String(cell || "").trim())) return;
+          const map = summaryRowMap(headers, row);
+          const session = map["組"] || snapshot.title || "未命名組別";
+          const key = `${date}|||${session}`;
+          if (!sections.has(key)) sections.set(key, { date, session, records: [] });
+          sections.get(key).records.push({ map, tripCount });
+        });
       }
-      return rows;
+      return Array.from(sections.values())
+        .sort((a, b) => {
+          const dateDiff = String(a.date).localeCompare(String(b.date));
+          if (dateDiff) return dateDiff;
+          return sessionNumber(a.session) - sessionNumber(b.session);
+        })
+        .flatMap((section) => normalizedDailySectionRows(section));
     }
 
     async function saveResultToDrive() {
@@ -4973,11 +5037,10 @@
         setStatus("目前沒有暫存整理表可以下載。", "bad");
         return;
       }
-      const title = `${fallbackDate} 整理總表`;
-      const excelRows = [[title, new Date().toLocaleString("zh-TW")], ...rows];
-      const htmlRows = excelRows.map((row, rowIndex) => {
+      const htmlRows = rows.map((row, rowIndex) => {
         const cells = row.map((cell) => {
-          const tag = rowIndex === 0 || row[0] === "姓名" || String(row[0] || "").endsWith("組") ? "th" : "td";
+          const isSectionTitle = row.length <= 2 && /^\d{4}/.test(String(row[0] || ""));
+          const tag = isSectionTitle || row[0] === "組" ? "th" : "td";
           return `<${tag}>${escapeHtml(cell)}</${tag}>`;
         }).join("");
         return `<tr>${cells}</tr>`;
