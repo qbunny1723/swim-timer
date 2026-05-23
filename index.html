@@ -1185,45 +1185,21 @@
       gap: 12px;
     }
 
-    .snapshot-meta {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 180px;
-      gap: 10px;
-    }
-
-    .snapshot-lanes {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
-    }
-
-    .snapshot-lane {
+    .snapshot-raw {
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 8px;
       background: var(--accent-soft);
     }
 
-    .snapshot-lane textarea {
-      min-height: 68px;
+    .snapshot-raw summary {
+      cursor: pointer;
+    }
+
+    .snapshot-raw textarea {
+      margin-top: 8px;
+      min-height: 96px;
       font-size: 13px;
-    }
-
-    .assignment-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 8px;
-    }
-
-    .assignment-item {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 76px;
-      align-items: center;
-      gap: 8px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 8px;
-      background: var(--panel);
     }
 
     .snapshot-preview {
@@ -1647,7 +1623,7 @@
 
     body[data-theme="ice"] .mix-panel,
     body[data-theme="ice"] .floating-body,
-    body[data-theme="ice"] .snapshot-lane,
+    body[data-theme="ice"] .snapshot-raw,
     body[data-theme="ice"] .examples {
       background: rgba(2, 18, 42, .38);
       border-color: rgba(93, 183, 255, .28);
@@ -1807,7 +1783,7 @@
 
     body[data-theme="amber"] .mix-panel,
     body[data-theme="amber"] .floating-body,
-    body[data-theme="amber"] .snapshot-lane,
+    body[data-theme="amber"] .snapshot-raw,
     body[data-theme="amber"] .examples {
       background: rgba(20, 15, 9, .45);
       border-color: rgba(202, 139, 36, .42);
@@ -1997,8 +1973,6 @@
       .mix-row input,
       .mix-row select { padding: 8px 7px; font-size: 13px; }
       .mix-suffix { font-size: 12px; }
-      .snapshot-meta { grid-template-columns: 1fr; }
-      .snapshot-lanes { grid-template-columns: 1fr; }
       .floating-settings { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
       .floating-panel summary { min-height: 40px; font-size: 12px; padding: 0 4px; }
       .floating-panel[open] { grid-column: 1 / -1; }
@@ -2394,6 +2368,11 @@
         createdAt: snapshot?.createdAt || new Date().toISOString(),
         entries: Array.isArray(snapshot?.entries) ? snapshot.entries.map(cloneEntry) : [],
         issues: Array.isArray(snapshot?.issues) ? snapshot.issues : [],
+        sessionGroup: snapshot?.sessionGroup || "",
+        summaryMetaOverrides: snapshot?.summaryMetaOverrides || {},
+        summaryTableRows: Array.isArray(snapshot?.summaryTableRows)
+          ? snapshot.summaryTableRows.map((row) => Array.isArray(row) ? row.slice() : [row])
+          : [],
         lanes: {
           A: { students: lanes.A?.students || "", workout: lanes.A?.workout || "" },
           B: { students: lanes.B?.students || "", workout: lanes.B?.workout || "" },
@@ -3799,49 +3778,21 @@
       }
 
       list.innerHTML = snapshots.map((snapshot, index) => {
-        const names = snapshotNames(snapshot);
-        const assignmentRows = names.length ? names.map((name) => `
-          <div class="assignment-item">
-            <strong>${escapeHtml(name)}</strong>
-            <select data-snapshot-index="${index}" data-assign-name="${escapeHtml(name)}">
-              ${["未標記", "A", "B", "C", "D"].map((value) => `<option value="${value}" ${((snapshot.assignments || {})[name] || "未標記") === value ? "selected" : ""}>${value}</option>`).join("")}
-            </select>
-          </div>`).join("") : `<p class="small">這組沒有整理到學生。</p>`;
-
-        const laneEditors = ["A", "B", "C", "D"].map((lane) => `
-          <div class="snapshot-lane">
-            <div class="lane-title">${lane} 課表</div>
-            <label class="save-label">課表內容</label>
-            <textarea data-snapshot-index="${index}" data-lane="${lane}" data-lane-field="workout" placeholder="例：100公尺 150含休 六趟">${escapeHtml(snapshot.lanes[lane]?.workout || "")}</textarea>
-          </div>`).join("");
-        const groupedPreview = renderSnapshotGroupedPreview(snapshot);
+        const summaryRows = snapshot.summaryTableRows?.length
+          ? snapshot.summaryTableRows
+          : currentSummaryTableRows(snapshot.entries || []);
 
         return `
           <details class="snapshot-card">
             <summary><span>${escapeHtml(snapshotLabel(snapshot, index))}</span><span>${escapeHtml(snapshot.date || "")}</span></summary>
             <div class="snapshot-body">
-              <div class="snapshot-meta">
-                <div class="save-field">
-                  <label class="save-label">組別標題</label>
-                  <input data-snapshot-index="${index}" data-snapshot-field="title" value="${escapeHtml(snapshot.title || "")}">
-                </div>
-                <div class="save-field">
-                  <label class="save-label">日期</label>
-                  <input type="date" data-snapshot-index="${index}" data-snapshot-field="date" value="${escapeHtml(snapshot.date || "")}">
-                </div>
-              </div>
-              <div class="save-field">
-                <label class="save-label">原始語音輸入文字</label>
+              <details class="snapshot-raw">
+                <summary class="save-label">原始語音輸入文字</summary>
                 <textarea readonly>${escapeHtml(snapshot.commandText || "")}</textarea>
-              </div>
-              <div class="snapshot-lanes">${laneEditors}</div>
+              </details>
               <div>
-                <div class="save-label" style="margin-bottom:8px;">學生本組課表標記</div>
-                <div class="assignment-grid">${assignmentRows}</div>
-              </div>
-              <div>
-                <div class="save-label" style="margin-bottom:8px;">依課表分組整理表</div>
-                <div class="snapshot-preview">${groupedPreview}</div>
+                <div class="save-label" style="margin-bottom:8px;">暫存整理表</div>
+                <div class="snapshot-preview">${tableHtmlFromRows(summaryRows)}</div>
               </div>
               <div class="button-row">
                 <button data-load-snapshot="${index}" class="secondary">載入這組</button>
@@ -3851,33 +3802,6 @@
           </details>`;
       }).join("");
 
-      list.querySelectorAll("[data-snapshot-field]").forEach((input) => {
-        input.addEventListener("input", () => {
-          const snapshot = snapshots[Number(input.dataset.snapshotIndex)];
-          if (!snapshot) return;
-          snapshot[input.dataset.snapshotField] = input.value;
-          saveSnapshotsLocal();
-        });
-      });
-      list.querySelectorAll("[data-lane][data-lane-field]").forEach((input) => {
-        input.addEventListener("input", () => {
-          const snapshot = snapshots[Number(input.dataset.snapshotIndex)];
-          if (!snapshot) return;
-          const lane = input.dataset.lane;
-          snapshot.lanes[lane] ||= { students: "", workout: "" };
-          snapshot.lanes[lane][input.dataset.laneField] = input.value;
-          saveSnapshotsLocal();
-        });
-      });
-      list.querySelectorAll("[data-assign-name]").forEach((select) => {
-        select.addEventListener("change", () => {
-          const snapshot = snapshots[Number(select.dataset.snapshotIndex)];
-          if (!snapshot) return;
-          snapshot.assignments ||= {};
-          snapshot.assignments[select.dataset.assignName] = select.value;
-          saveSnapshotsLocal();
-        });
-      });
       list.querySelectorAll("[data-load-snapshot]").forEach((button) => {
         button.addEventListener("click", () => loadSnapshot(Number(button.dataset.loadSnapshot)));
       });
@@ -4261,6 +4185,9 @@
         createdAt: new Date().toISOString(),
         entries: state.entries.map(cloneEntry),
         issues: state.issues.slice(),
+        sessionGroup: el("sessionGroup")?.value || "",
+        summaryMetaOverrides: JSON.parse(JSON.stringify(state.summaryMetaOverrides || {})),
+        summaryTableRows: currentSummaryTableRows(),
         lanes: {
           A: { students: plan.laneAStudents, workout: plan.laneAWorkout },
           B: { students: plan.laneBStudents, workout: plan.laneBWorkout },
@@ -4287,10 +4214,10 @@
       if (!snapshot) return;
       state.entries = snapshot.entries.map(cloneEntry);
       state.issues = snapshot.issues.slice();
-      state.summaryMetaOverrides = {};
+      state.summaryMetaOverrides = JSON.parse(JSON.stringify(snapshot.summaryMetaOverrides || {}));
       el("commandBox").value = snapshot.commandText || "";
       const titleMatch = String(snapshot.title || "").match(/\d+/);
-      if (el("sessionGroup") && titleMatch) el("sessionGroup").value = titleMatch[0];
+      if (el("sessionGroup")) el("sessionGroup").value = snapshot.sessionGroup || titleMatch?.[0] || "1";
       if (el("resultDate")) el("resultDate").value = snapshot.date || new Date().toISOString().slice(0, 10);
       const charCount = el("charCount");
       if (charCount) charCount.textContent = `${el("commandBox").value.length} / 300`;
@@ -4403,6 +4330,61 @@
       return rows;
     }
 
+    function currentSummaryTableRows(entries = state.entries) {
+      const headers = ["組", "出發序", "課表組", "課表內容", "含休", "姓名"];
+      for (let i = 1; i <= maxTrips; i++) headers.push(`第${i}趟成績`);
+      headers.push("完成", "PB", "PB趟次", "最新", "進步", "平均");
+      const rows = [headers];
+      grouped(entries).forEach(({ name, trips }) => {
+        const meta = summaryMetaForName(name, entries);
+        const results = trips.map((trip) => {
+          if (!trip.back) return null;
+          if (!trip.start && !(trip.back.deductSeconds || 0)) return null;
+          const backTotal = entryTotal(trip.back);
+          const startTotal = entryTotal(trip.start);
+          if (!Number.isFinite(backTotal) || (trip.start && !Number.isFinite(startTotal))) return null;
+          return trip.start ? backTotal - startTotal - (trip.back.deductSeconds || 0) : backTotal - (trip.back.deductSeconds || 0);
+        });
+        const valid = results.filter((value) => value !== null && value >= 0);
+        const personalRanks = personalRankMap(results);
+        const intervalDiffs = courseIntervalDiffMap(trips, meta.time?.total);
+        const metrics = swimmerMetrics(trips);
+        const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "";
+        const row = [
+          sessionGroupLabel(),
+          meta.personOrder,
+          courseGroupLetter(meta.courseGroup),
+          meta.item,
+          meta.timeRaw,
+          name,
+        ];
+        results.forEach((result, index) => {
+          if (result === null) {
+            row.push("");
+            return;
+          }
+          if (result < 0) {
+            row.push("回來早於出發");
+            return;
+          }
+          const rank = personalRanks.get(index);
+          const cycleDiff = intervalDiffs.get(index);
+          const cycleDiffLabel = Number.isFinite(cycleDiff) ? `${cycleDiff > 0 ? "+" : ""}${cycleDiff}秒` : "";
+          row.push([fmt(result), rank ? `#${rank}` : "", cycleDiffLabel].filter(Boolean).join(" "));
+        });
+        row.push(
+          valid.length,
+          fmt(metrics.pb),
+          metrics.bestTrip,
+          fmt(metrics.latest),
+          metrics.improvement === "" ? "" : (metrics.improvement > 0 ? `+${metrics.improvement}秒` : `${metrics.improvement}秒`),
+          fmt(avg)
+        );
+        rows.push(row);
+      });
+      return rows;
+    }
+
     function enforceNameColumn(rows) {
       if (!Array.isArray(rows) || !rows.length) return [["姓名"]];
       const fixed = rows.map((row) => Array.isArray(row) ? row.slice() : [row]);
@@ -4452,25 +4434,13 @@
       rows.push(["原始語音輸入文字"]);
       rows.push([snapshot.commandText || ""]);
       rows.push([]);
-      snapshotFinalGroups(snapshot).forEach(({ lane, workout, rows: tableRows }) => {
-        rows.push([`${lane}組`, "課表內容", workout || ""]);
-        rows.push(...enforceNameColumn(tableRows));
-        rows.push([]);
-      });
-      rows.push(["未標記學生"]);
-      const unassigned = snapshotNames(snapshot).filter((name) => !["A", "B", "C", "D"].includes((snapshot.assignments || {})[name]));
-      if (unassigned.length) rows.push(...enforceNameColumn(finalSummaryRows(entriesForNames(snapshot.entries, unassigned))));
+      rows.push(["暫存整理表"]);
+      rows.push(...(snapshot.summaryTableRows?.length ? snapshot.summaryTableRows : currentSummaryTableRows(snapshot.entries || [])));
       return rows;
     }
 
     function snapshotSummaryOnlyRows(snapshot) {
-      const rows = [];
-      snapshotFinalGroups(snapshot).forEach(({ lane, workout, rows: tableRows }) => {
-        rows.push([`${lane}組`, "課表內容", workout || ""]);
-        rows.push(...enforceNameColumn(tableRows));
-        rows.push([]);
-      });
-      return rows;
+      return snapshot.summaryTableRows?.length ? snapshot.summaryTableRows : currentSummaryTableRows(snapshot.entries || []);
     }
 
     function dailySummaryRows(fallbackDate) {
@@ -4493,7 +4463,7 @@
         return;
       }
       if (!title) {
-        setStatus("請先輸入組別標題，例如：第1組。", "bad");
+        setStatus("請先確認第幾組。", "bad");
         return;
       }
       if (summary.length <= 1) {
@@ -4568,7 +4538,7 @@
       const fallbackDate = currentResultDate();
       const rows = dailySummaryRows(fallbackDate);
       if (!rows.length) {
-        setStatus("請先在暫存紀錄中標記 A/B/C/D 課表，才有總表可下載。", "bad");
+        setStatus("目前沒有暫存整理表可以下載。", "bad");
         return;
       }
       const title = `${fallbackDate} 整理總表`;
