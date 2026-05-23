@@ -4224,6 +4224,14 @@
       });
       if (!rows.length) return "";
       const [headers, ...bodyRows] = rows;
+      const tripColumns = headers
+        .map((header, columnIndex) => ({ header, columnIndex }))
+        .filter(({ header }) => String(header || "").includes("趟成績"));
+      const enhancedHeaders = [
+        ...headers.slice(0, 6),
+        "項目PB",
+        ...headers.slice(6),
+      ];
       const plan = activeCoursePlanRowsFromSettings(snapshot.courseSettings);
       const courseOptions = (selected) => plan.map((row) =>
         `<option value="${row.group}"${String(selected) === row.groupLabel || Number(selected) === row.group ? " selected" : ""}>${row.groupLabel}</option>`
@@ -4231,10 +4239,11 @@
       return `
         <div class="table-wrap">
           <table>
-            <thead><tr>${headers.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead>
+            <thead><tr>${enhancedHeaders.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead>
             <tbody>${bodyRows.length ? bodyRows.map((row) => {
               const name = row[5] || "";
-              return `<tr>${row.map((cell, cellIndex) => {
+              const itemPb = getPb(name, row[3]);
+              const resultCells = row.map((cell, cellIndex) => {
                 if (cellIndex === 1) {
                   return `<td><input class="person-order-input" data-snapshot-index="${index}" data-snapshot-person-order="${escapeHtml(name)}" type="number" min="1" value="${escapeHtml(cell)}"></td>`;
                 }
@@ -4247,7 +4256,21 @@
                 const className = isScore || isPb ? "result" : isProgress ? (String(cell).startsWith("+") ? "metric-good" : "metric-muted") : "";
                 const content = isScore ? formatSnapshotScoreCell(cell) : escapeHtml(cell);
                 return `<td${className ? ` class="${className}"` : ""}>${content}</td>`;
-              }).join("")}</tr>`;
+              });
+              resultCells.splice(6, 0, `<td class="result">${escapeHtml(itemPb?.pb || "")}</td>`);
+              const intensityCells = tripColumns.map(({ columnIndex }) => {
+                const seconds = parsePbSeconds(String(row[columnIndex] || "").trim().split(/\s+/)[0] || "");
+                const label = intensityLabel(itemPb?.seconds, seconds);
+                const percent = label ? Number(label.replace("%", "")) : NaN;
+                return `<td class="intensity-value ${intensityClass(percent)}">${label}</td>`;
+              }).join("");
+              return `<tr>${resultCells.join("")}</tr>
+                <tr class="intensity-row">
+                  <td colspan="6"></td>
+                  <td class="intensity-label">${itemPb ? "強度" : ""}</td>
+                  ${intensityCells}
+                  <td colspan="${Math.max(0, enhancedHeaders.length - 7 - tripColumns.length)}"></td>
+                </tr>`;
             }).join("") : `<tr><td colspan="${headers.length}">尚無學生。</td></tr>`}</tbody>
           </table>
         </div>`;
