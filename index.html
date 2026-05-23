@@ -2249,7 +2249,7 @@
       </div>
       <div class="body">
         <div class="snapshot-actions">
-          <button id="uploadSnapshotsBtn" class="btn-save-coral">全部上傳</button>
+          <button id="uploadSnapshotsBtn" class="btn-save-coral">上傳備份</button>
           <button id="uploadSummaryBtn" class="secondary">上傳整理總表</button>
           <button id="coachExcelBtn" class="secondary">下載教練Excel</button>
           <button id="clearSnapshotsBtn" class="danger">清空暫存</button>
@@ -4052,6 +4052,10 @@
               <label>課表組數</label>
               <input data-snapshot-index="${index}" data-snapshot-setting="mixCount" type="number" min="2" max="${COURSE_GROUPS.length}" value="${settings.mixCount}">
             </div>
+            <div>
+              <label>日期</label>
+              <input data-snapshot-index="${index}" data-snapshot-setting="date" type="date" value="${escapeHtml(snapshot.date || currentResultDate())}">
+            </div>
           </div>
           <div class="mix-rows">${courseRows}</div>
         </div>
@@ -4133,6 +4137,12 @@
       else if (field === "defaultGroup") snapshot.courseSettings.defaultGroup = Number(input.value) || 1;
       else if (field === "mixCount") snapshot.courseSettings.mixCount = Number(input.value) || 2;
       else if (field === "sessionGroup") snapshot.courseSettings.sessionGroup = input.value || "1";
+      else if (field === "date") {
+        snapshot.date = input.value || currentResultDate();
+        saveSnapshotsLocal();
+        renderSnapshotList(index);
+        return;
+      }
       refreshSnapshotSummary(snapshot, index);
     }
 
@@ -4771,6 +4781,40 @@
       return rows;
     }
 
+    function snapshotBackupBlocks(snapshot, fallbackDate) {
+      const date = snapshot.date || fallbackDate;
+      const settings = normalizeCourseSettings(snapshot.courseSettings);
+      const sessionGroup = settings.sessionGroup || snapshot.sessionGroup || "1";
+      const sessionLabel = `第${sessionGroup}組`;
+      const summaryRows = snapshotSummaryOnlyRows(snapshot);
+      if (summaryRows.length <= 1) return [];
+      const [headers, ...bodyRows] = summaryRows;
+      const courseGroupIndex = headers.indexOf("課表組");
+      if (courseGroupIndex < 0) return [];
+      const plan = activeCoursePlanRowsFromSettings(settings);
+      const planByLabel = new Map(plan.map((row) => [row.groupLabel, row]));
+      const groups = Array.from(new Set(bodyRows.map((row) => String(row[courseGroupIndex] || "").trim()).filter(Boolean)));
+      return groups.map((groupLabel) => {
+        const planRow = planByLabel.get(groupLabel) || {};
+        const filteredRows = bodyRows.filter((row) => String(row[courseGroupIndex] || "").trim() === groupLabel);
+        const key = `${sessionLabel}|${groupLabel}`;
+        const title = `${date} ${sessionLabel} ${groupLabel}課表`;
+        return {
+          key,
+          title,
+          rows: [
+            ["#BACKUP_KEY", key],
+            [title],
+            ["日期", date, "組", sessionLabel, "課表組", groupLabel],
+            ["課表內容", planRow.item || "", "當趟含休", planRow.timeRaw || "", "出發間隔", planRow.intervalRaw || ""],
+            [],
+            headers,
+            ...filteredRows,
+          ],
+        };
+      }).filter((block) => block.rows.length > 6);
+    }
+
     function snapshotSummaryOnlyRows(snapshot) {
       return snapshot.summaryTableRows?.length ? snapshot.summaryTableRows : currentSummaryTableRows(snapshot.entries || [], {
         courseSettings: snapshot.courseSettings,
@@ -4818,24 +4862,36 @@
 
     async function uploadSnapshotsToDrive() {
       if (!snapshots.length) {
-        setStatus("目前沒有暫存紀錄可以上傳。", "bad");
+        setStatus("目前沒有暫存紀錄可以上傳備份。", "bad");
         return;
       }
       const fallbackDate = currentResultDate();
-      setStatus(`正在上傳 ${snapshots.length} 組暫存紀錄...`, "good");
+      const blocksByDate = new Map();
+      snapshots.forEach((snapshot) => {
+        snapshotBackupBlocks(snapshot, fallbackDate).forEach((block) => {
+          const date = snapshot.date || fallbackDate;
+          if (!blocksByDate.has(date)) blocksByDate.set(date, []);
+          blocksByDate.get(date).push(block);
+        });
+      });
+      const blockCount = Array.from(blocksByDate.values()).reduce((sum, blocks) => sum + blocks.length, 0);
+      if (!blockCount) {
+        setStatus("目前沒有可上傳備份的暫存整理表。", "bad");
+        return;
+      }
+      setStatus(`正在上傳 ${blockCount} 筆備份區塊...`, "good");
       try {
-        for (const snapshot of snapshots) {
+        for (const [date, blocks] of blocksByDate) {
           const result = await sheetAction({
-            action: "saveResult",
-            date: snapshot.date || fallbackDate,
-            title: snapshot.title || "未命名組別",
-            rows: snapshotFinalRows(snapshot),
+            action: "saveBackupBlocks",
+            date,
+            blocks,
           });
           if (!result || !result.ok) throw new Error("save failed");
         }
-        setStatus(`已上傳 ${snapshots.length} 組暫存紀錄。`, "good");
+        setStatus(`已上傳 ${blockCount} 筆備份；同日期同組別課表會更新舊資料。`, "good");
       } catch {
-        setStatus("暫存上傳失敗：請確認網路與 Apps Script 權限。", "bad");
+        setStatus("備份上傳失敗：請確認已部署新版 Apps Script。", "bad");
       }
     }
 
