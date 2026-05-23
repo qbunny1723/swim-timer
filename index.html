@@ -742,6 +742,28 @@
       color: var(--accent);
     }
 
+    tr.intensity-row td {
+      padding-top: 2px;
+      font-size: 12px;
+      color: var(--muted);
+      background: color-mix(in srgb, var(--accent-soft), transparent 42%);
+    }
+
+    td.intensity-label {
+      font-weight: 800;
+      color: var(--muted);
+    }
+
+    td.intensity-value {
+      text-align: center;
+      font-weight: 850;
+    }
+
+    .intensity-high { color: #c0392b; }
+    .intensity-strong { color: #d9822b; }
+    .intensity-medium { color: #2f80ed; }
+    .intensity-easy { color: var(--muted); }
+
     .issue {
       color: var(--bad);
       font-weight: 700;
@@ -2838,6 +2860,19 @@
       return pbState.byNameItem.get(`${String(name || "").trim()}|||${normalizePbItem(item)}`) || null;
     }
 
+    function intensityClass(percent) {
+      if (!Number.isFinite(percent)) return "";
+      if (percent >= 95) return "intensity-high";
+      if (percent >= 90) return "intensity-strong";
+      if (percent >= 80) return "intensity-medium";
+      return "intensity-easy";
+    }
+
+    function intensityLabel(pbSeconds, resultSeconds) {
+      if (!Number.isFinite(pbSeconds) || !Number.isFinite(resultSeconds) || resultSeconds <= 0) return "";
+      return `${Math.round((pbSeconds / resultSeconds) * 100)}%`;
+    }
+
     async function loadPbData() {
       let usedLocal = false;
       try {
@@ -2848,9 +2883,13 @@
       try {
         const result = await sheetAction({ action: "getPbData" });
         if (!result?.ok || !applyPbData(result.data, true)) throw new Error("invalid-pb-data");
+        if (state.entries.length) render();
         setStatus(`已載入 PB：${pbState.studentCount} 位學生。`, "good");
       } catch {
-        if (usedLocal) setStatus(`已使用這台裝置的 PB 快取：${pbState.studentCount} 位學生。`, "good");
+        if (usedLocal) {
+          if (state.entries.length) render();
+          setStatus(`已使用這台裝置的 PB 快取：${pbState.studentCount} 位學生。`, "good");
+        }
         else setStatus("PB 尚未載入：請確認 Apps Script 已更新並重新部署。", "bad");
       }
     }
@@ -3898,7 +3937,7 @@
         <thead>
           <tr>
             <th>組</th><th>出發序</th><th>課表組</th><th>課表內容</th><th>含休</th>
-            <th>姓名</th>
+            <th>姓名</th><th>項目PB</th>
             ${Array.from({ length: maxTrips }, (_, i) => `<th>第${i + 1}趟成績</th>`).join("")}
             <th>完成</th><th>PB</th><th>PB趟次</th><th>最新</th><th>進步</th><th>平均</th>
           </tr>
@@ -3919,9 +3958,43 @@
             const intervalDiffs = courseIntervalDiffMap(trips, meta.time?.total);
             const metrics = swimmerMetrics(trips);
             const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "";
+            const itemPb = getPb(name, meta.item);
             const courseOptions = activeCoursePlanRows().map((row) =>
               `<option value="${row.group}"${meta.courseGroup === row.group ? " selected" : ""}>${row.groupLabel}</option>`
             ).join("");
+            const resultCells = Array.from({ length: maxTrips }, (_, i) => {
+              const trip = trips[i] || {};
+              const result = results[i];
+              const bad = result !== null && result < 0;
+              const rank = result !== null && result >= 0 ? personalRanks.get(i) : "";
+              const cycleDiff = intervalDiffs.get(i);
+              const cycleDiffLabel = Number.isFinite(cycleDiff) ? `${cycleDiff > 0 ? "+" : ""}${cycleDiff}秒` : "";
+              const cycleDiffClass = cycleDiff > 0 ? "cycle-diff-plus" : "cycle-diff-minus";
+              const cycleDiffTitle = Number.isFinite(cycleDiff)
+                ? `出發週期差：本趟出發 - 上一趟出發，比含休${cycleDiff > 0 ? "多" : "少"}${Math.abs(cycleDiff)}秒`
+                : "";
+              const resultLabel = bad ? "回來早於出發" : fmt(result);
+              const detailArgs = [
+                name,
+                i + 1,
+                trip.start ? trip.start.time.label : "",
+                trip.back ? `${trip.back.time.label}${trip.back.deductSeconds ? ` 扣${trip.back.deductSeconds}秒` : ""}` : "",
+                resultLabel,
+                rank ? `#${rank}` : "",
+              ].map((value) => JSON.stringify(value)).join(",");
+              const rankClass = rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : "rank-4up";
+              return `<td class="${bad ? "issue" : "result"}">${
+                resultLabel
+                  ? `<button class="result-btn" onclick='showTripDetail(${detailArgs})'>${resultLabel}${rank ? `<span class="rank-badge ${rankClass}">#${rank}</span>` : ""}${cycleDiffLabel ? `<span class="cycle-diff-badge ${cycleDiffClass}" title="${escapeHtml(cycleDiffTitle)}">${cycleDiffLabel}</span>` : ""}</button>`
+                  : ""
+              }</td>`;
+            }).join("");
+            const intensityCells = Array.from({ length: maxTrips }, (_, i) => {
+              const result = results[i];
+              const label = intensityLabel(itemPb?.seconds, result);
+              const percent = label ? Number(label.replace("%", "")) : NaN;
+              return `<td class="intensity-value ${intensityClass(percent)}">${label}</td>`;
+            }).join("");
             return `<tr>
               <td>${escapeHtml(sessionGroupLabel())}</td>
               <td><input class="person-order-input" data-person-order="${escapeHtml(name)}" type="number" min="1" value="${escapeHtml(meta.personOrder)}"></td>
@@ -3929,40 +4002,22 @@
               <td>${escapeHtml(meta.item)}</td>
               <td>${escapeHtml(meta.timeRaw)}</td>
               <td><strong>${escapeHtml(name)}</strong></td>
-              ${trips.map((trip, i) => {
-                const result = results[i];
-                const bad = result !== null && result < 0;
-                const rank = result !== null && result >= 0 ? personalRanks.get(i) : "";
-                const cycleDiff = intervalDiffs.get(i);
-                const cycleDiffLabel = Number.isFinite(cycleDiff) ? `${cycleDiff > 0 ? "+" : ""}${cycleDiff}秒` : "";
-                const cycleDiffClass = cycleDiff > 0 ? "cycle-diff-plus" : "cycle-diff-minus";
-                const cycleDiffTitle = Number.isFinite(cycleDiff)
-                  ? `出發週期差：本趟出發 - 上一趟出發，比含休${cycleDiff > 0 ? "多" : "少"}${Math.abs(cycleDiff)}秒`
-                  : "";
-                const resultLabel = bad ? "回來早於出發" : fmt(result);
-                const detailArgs = [
-                  name,
-                  i + 1,
-                  trip.start ? trip.start.time.label : "",
-                  trip.back ? `${trip.back.time.label}${trip.back.deductSeconds ? ` 扣${trip.back.deductSeconds}秒` : ""}` : "",
-                  resultLabel,
-                  rank ? `#${rank}` : "",
-                ].map((value) => JSON.stringify(value)).join(",");
-                const rankClass = rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : "rank-4up";
-                return `<td class="${bad ? "issue" : "result"}">${
-                  resultLabel
-                    ? `<button class="result-btn" onclick='showTripDetail(${detailArgs})'>${resultLabel}${rank ? `<span class="rank-badge ${rankClass}">#${rank}</span>` : ""}${cycleDiffLabel ? `<span class="cycle-diff-badge ${cycleDiffClass}" title="${escapeHtml(cycleDiffTitle)}">${cycleDiffLabel}</span>` : ""}</button>`
-                    : ""
-                }</td>`;
-              }).join("")}
+              <td class="result">${escapeHtml(itemPb?.pb || "")}</td>
+              ${resultCells}
               <td>${valid.length}</td>
               <td class="result">${fmt(metrics.pb)}</td>
               <td>${metrics.bestTrip}</td>
               <td>${fmt(metrics.latest)}</td>
               <td class="${metrics.improvement > 0 ? "metric-good" : "metric-muted"}">${metrics.improvement === "" ? "" : (metrics.improvement > 0 ? `+${metrics.improvement}秒` : `${metrics.improvement}秒`)}</td>
               <td>${fmt(avg)}</td>
+            </tr>
+            <tr class="intensity-row">
+              <td colspan="6"></td>
+              <td class="intensity-label">${itemPb ? "強度" : ""}</td>
+              ${intensityCells}
+              <td colspan="6"></td>
             </tr>`;
-          }).join("") : `<tr><td colspan="18">尚未整理。把口令貼到左邊後按「整理」。</td></tr>`}
+          }).join("") : `<tr><td colspan="19">尚未整理。把口令貼到左邊後按「整理」。</td></tr>`}
         </tbody>`;
 
       el("summaryTable").querySelectorAll("[data-person-order]").forEach((input) => {
