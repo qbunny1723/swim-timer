@@ -4908,6 +4908,7 @@
         uploadBtn.classList.add("is-loading");
         uploadBtn.textContent = "上傳中...";
       }
+      let resetDelay = 600;
       setStatus(`正在上傳 ${blockCount} 筆備份區塊...`, "good");
       try {
         for (const [date, blocks] of blocksByDate) {
@@ -4921,6 +4922,7 @@
         if (uploadBtn) uploadBtn.textContent = "已上傳 ✓";
         setStatus(`已上傳 ${blockCount} 筆備份；同日期同組別課表會更新舊資料。`, "good");
       } catch {
+        resetDelay = 2000;
         if (uploadBtn) uploadBtn.textContent = "上傳失敗";
         setStatus("備份上傳失敗：請確認已部署新版 Apps Script。", "bad");
       } finally {
@@ -4929,7 +4931,7 @@
             uploadBtn.disabled = false;
             uploadBtn.classList.remove("is-loading");
             uploadBtn.textContent = originalText;
-          }, 1500);
+          }, resetDelay);
         }
       }
     }
