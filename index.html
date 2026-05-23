@@ -2873,6 +2873,19 @@
       return `${Math.round((pbSeconds / resultSeconds) * 100)}%`;
     }
 
+    function redrawPbDependentViews() {
+      if (state.entries.length) render();
+      if (!snapshots.length) return;
+      snapshots.forEach((snapshot) => {
+        snapshot.summaryTableRows = currentSummaryTableRows(snapshot.entries || [], {
+          courseSettings: snapshot.courseSettings,
+          summaryMetaOverrides: snapshot.summaryMetaOverrides || {},
+        });
+      });
+      saveSnapshotsLocal();
+      renderSnapshotList();
+    }
+
     async function loadPbData() {
       let usedLocal = false;
       try {
@@ -2883,11 +2896,11 @@
       try {
         const result = await sheetAction({ action: "getPbData" });
         if (!result?.ok || !applyPbData(result.data, true)) throw new Error("invalid-pb-data");
-        if (state.entries.length) render();
+        redrawPbDependentViews();
         setStatus(`已載入 PB：${pbState.studentCount} 位學生。`, "good");
       } catch {
         if (usedLocal) {
-          if (state.entries.length) render();
+          redrawPbDependentViews();
           setStatus(`已使用這台裝置的 PB 快取：${pbState.studentCount} 位學生。`, "good");
         }
         else setStatus("PB 尚未載入：請確認 Apps Script 已更新並重新部署。", "bad");
