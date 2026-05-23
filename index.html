@@ -760,9 +760,30 @@
     }
 
     .intensity-high { color: #c0392b; }
-    .intensity-strong { color: #d9822b; }
+    .intensity-strong { color: #7f46d9; }
     .intensity-medium { color: #2f80ed; }
-    .intensity-easy { color: var(--muted); }
+    .intensity-easy { color: #008f63; }
+    .intensity-low { color: var(--muted); }
+    tr.intensity-row td.intensity-high {
+      color: #fff;
+      background: rgba(255, 91, 132, .82);
+    }
+    tr.intensity-row td.intensity-strong {
+      color: #fff;
+      background: rgba(143, 101, 234, .74);
+    }
+    tr.intensity-row td.intensity-medium {
+      color: #063e75;
+      background: rgba(120, 187, 255, .66);
+    }
+    tr.intensity-row td.intensity-easy {
+      color: #064b42;
+      background: rgba(105, 216, 190, .62);
+    }
+    tr.intensity-row td.intensity-low {
+      color: #695f77;
+      background: rgba(225, 217, 235, .72);
+    }
 
     .issue {
       color: var(--bad);
@@ -1192,7 +1213,7 @@
 
     .snapshot-actions {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
       margin-bottom: 10px;
     }
@@ -2037,7 +2058,7 @@
       .save-row { grid-template-columns: 1fr 1fr; }
       .save-row #saveResultBtn { grid-column: 1 / -1; }
       .lane-grid { grid-template-columns: 1fr; }
-      .snapshot-actions { grid-template-columns: 1fr; }
+      .snapshot-actions { grid-template-columns: 1fr 1fr; }
       .mix-top-row { grid-template-columns: max-content minmax(0, 1fr); }
       .mix-control-row { grid-template-columns: minmax(0, 1fr) minmax(0, .8fr); }
       .mix-row { grid-template-columns: 44px minmax(0, 1.15fr) minmax(0, .85fr) minmax(0, .85fr); gap: 6px; }
@@ -2291,9 +2312,9 @@
       <div class="body">
         <div class="snapshot-actions">
           <button id="uploadSnapshotsBtn" class="btn-save-coral">上傳備份</button>
+          <button id="clearSnapshotsBtn" class="danger">清空暫存</button>
           <button id="uploadSummaryBtn" class="secondary">上傳整理總表</button>
           <button id="coachExcelBtn" class="secondary">下載教練Excel</button>
-          <button id="clearSnapshotsBtn" class="danger">清空暫存</button>
         </div>
         <div id="snapshotList" class="snapshot-list"></div>
         <p class="small">每一組暫存後都可以點開，事後補 A/B/C/D/E 課表，並逐一標記學生這組游哪一個課表。</p>
@@ -2862,10 +2883,11 @@
 
     function intensityClass(percent) {
       if (!Number.isFinite(percent)) return "";
-      if (percent >= 95) return "intensity-high";
-      if (percent >= 90) return "intensity-strong";
-      if (percent >= 80) return "intensity-medium";
-      return "intensity-easy";
+      if (percent >= 100) return "intensity-high";
+      if (percent >= 95) return "intensity-strong";
+      if (percent >= 90) return "intensity-medium";
+      if (percent >= 85) return "intensity-easy";
+      return "intensity-low";
     }
 
     function intensityLabel(pbSeconds, resultSeconds) {
@@ -3952,7 +3974,7 @@
             <th>組</th><th>出發序</th><th>課表組</th><th>課表內容</th><th>含休</th>
             <th>姓名</th><th>項目PB</th>
             ${Array.from({ length: maxTrips }, (_, i) => `<th>第${i + 1}趟成績</th>`).join("")}
-            <th>完成</th><th>PB</th><th>PB趟次</th><th>最新</th><th>進步</th><th>平均</th>
+            <th>完成</th><th>PB</th><th>PB趟次</th><th>首末差</th><th>平均</th>
           </tr>
         </thead>
         <tbody>
@@ -4008,6 +4030,10 @@
               const percent = label ? Number(label.replace("%", "")) : NaN;
               return `<td class="intensity-value ${intensityClass(percent)}">${label}</td>`;
             }).join("");
+            const pbIntensityLabel = intensityLabel(itemPb?.seconds, metrics.pb);
+            const pbIntensityPercent = pbIntensityLabel ? Number(pbIntensityLabel.replace("%", "")) : NaN;
+            const avgIntensityLabel = intensityLabel(itemPb?.seconds, avg);
+            const avgIntensityPercent = avgIntensityLabel ? Number(avgIntensityLabel.replace("%", "")) : NaN;
             return `<tr>
               <td>${escapeHtml(sessionGroupLabel())}</td>
               <td><input class="person-order-input" data-person-order="${escapeHtml(name)}" type="number" min="1" value="${escapeHtml(meta.personOrder)}"></td>
@@ -4020,7 +4046,6 @@
               <td>${valid.length}</td>
               <td class="result">${fmt(metrics.pb)}</td>
               <td>${metrics.bestTrip}</td>
-              <td>${fmt(metrics.latest)}</td>
               <td class="${metrics.improvement > 0 ? "metric-good" : "metric-muted"}">${metrics.improvement === "" ? "" : (metrics.improvement > 0 ? `+${metrics.improvement}秒` : `${metrics.improvement}秒`)}</td>
               <td>${fmt(avg)}</td>
             </tr>
@@ -4028,9 +4053,12 @@
               <td colspan="6"></td>
               <td class="intensity-label">${itemPb ? "強度" : ""}</td>
               ${intensityCells}
-              <td colspan="6"></td>
+              <td></td>
+              <td class="intensity-value ${intensityClass(pbIntensityPercent)}">${pbIntensityLabel}</td>
+              <td colspan="2"></td>
+              <td class="intensity-value ${intensityClass(avgIntensityPercent)}">${avgIntensityLabel}</td>
             </tr>`;
-          }).join("") : `<tr><td colspan="19">尚未整理。把口令貼到左邊後按「整理」。</td></tr>`}
+            }).join("") : `<tr><td colspan="18">尚未整理。把口令貼到左邊後按「整理」。</td></tr>`}
         </tbody>`;
 
       el("summaryTable").querySelectorAll("[data-person-order]").forEach((input) => {
@@ -4264,8 +4292,8 @@
                   return `<td><select class="course-group-select" data-snapshot-index="${index}" data-snapshot-course-group="${escapeHtml(name)}">${courseOptions(cell)}</select></td>`;
                 }
                 const isScore = headers[cellIndex]?.includes("趟成績");
-                const isPb = headers[cellIndex] === "PB" || headers[cellIndex] === "最新";
-                const isProgress = headers[cellIndex] === "進步";
+                const isPb = headers[cellIndex] === "PB";
+                const isProgress = headers[cellIndex] === "首末差" || headers[cellIndex] === "進步";
                 const className = isScore || isPb ? "result" : isProgress ? (String(cell).startsWith("+") ? "metric-good" : "metric-muted") : "";
                 const content = isScore ? formatSnapshotScoreCell(cell) : escapeHtml(cell);
                 return `<td${className ? ` class="${className}"` : ""}>${content}</td>`;
@@ -4277,14 +4305,23 @@
                 const percent = label ? Number(label.replace("%", "")) : NaN;
                 return `<td class="intensity-value ${intensityClass(percent)}">${label}</td>`;
               }).join("");
+              const pbIndex = headers.indexOf("PB");
+              const avgIndex = headers.indexOf("平均");
+              const pbIntensityLabel = intensityLabel(itemPb?.seconds, parsePbSeconds(row[pbIndex]));
+              const pbIntensityPercent = pbIntensityLabel ? Number(pbIntensityLabel.replace("%", "")) : NaN;
+              const avgIntensityLabel = intensityLabel(itemPb?.seconds, parsePbSeconds(row[avgIndex]));
+              const avgIntensityPercent = avgIntensityLabel ? Number(avgIntensityLabel.replace("%", "")) : NaN;
               return `<tr>${resultCells.join("")}</tr>
                 <tr class="intensity-row">
                   <td colspan="6"></td>
                   <td class="intensity-label">${itemPb ? "強度" : ""}</td>
                   ${intensityCells}
-                  <td colspan="${Math.max(0, enhancedHeaders.length - 7 - tripColumns.length)}"></td>
+                  <td></td>
+                  <td class="intensity-value ${intensityClass(pbIntensityPercent)}">${pbIntensityLabel}</td>
+                  <td colspan="2"></td>
+                  <td class="intensity-value ${intensityClass(avgIntensityPercent)}">${avgIntensityLabel}</td>
                 </tr>`;
-            }).join("") : `<tr><td colspan="${headers.length}">尚無學生。</td></tr>`}</tbody>
+            }).join("") : `<tr><td colspan="${enhancedHeaders.length}">尚無學生。</td></tr>`}</tbody>
           </table>
         </div>`;
     }
@@ -4768,7 +4805,7 @@
     function summaryRows(entries = state.entries) {
       const headers = ["姓名"];
       for (let i = 1; i <= maxTrips; i++) headers.push(`第${i}趟出發`, `第${i}趟回來`, `第${i}趟成績`, `第${i}趟個人排名`);
-      headers.push("完成趟數", "PB", "PB趟次", "最新", "進步秒數", "平均");
+      headers.push("完成趟數", "PB", "PB趟次", "首末差秒數", "平均");
       const rows = [headers];
       for (const { name, trips } of grouped(entries)) {
         const row = [name];
@@ -4793,7 +4830,6 @@
           valid.length,
           fmt(metrics.pb),
           metrics.bestTrip,
-          fmt(metrics.latest),
           metrics.improvement === "" ? "" : metrics.improvement,
           fmt(valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "")
         );
@@ -4833,7 +4869,7 @@
       }));
       const headers = ["姓名"];
       for (let i = 1; i <= visibleTrips; i++) headers.push(`第${i}趟成績`);
-      headers.push("完成", "PB", "PB趟次", "最新", "進步", "平均");
+      headers.push("完成", "PB", "PB趟次", "首末差", "平均");
       const rows = [headers];
       swimmers.forEach(({ name, results, valid, metrics, avg }) => {
         const row = [name];
@@ -4842,7 +4878,6 @@
           valid.length,
           fmt(metrics.pb),
           metrics.bestTrip,
-          fmt(metrics.latest),
           metrics.improvement === "" ? "" : `${metrics.improvement}秒`,
           fmt(avg)
         );
@@ -4863,7 +4898,7 @@
       }));
       const headers = ["組", "出發序", "課表組", "課表內容", "含休", "姓名"];
       for (let i = 1; i <= visibleTrips; i++) headers.push(`第${i}趟成績`);
-      headers.push("完成", "PB", "PB趟次", "最新", "進步", "平均");
+      headers.push("完成", "PB", "PB趟次", "首末差", "平均");
       const rows = [headers];
       grouped(entries).forEach(({ name, trips }) => {
         const meta = summaryMetaForContext(name, entries, settings, overrides);
@@ -4906,7 +4941,6 @@
           valid.length,
           fmt(metrics.pb),
           metrics.bestTrip,
-          fmt(metrics.latest),
           metrics.improvement === "" ? "" : (metrics.improvement > 0 ? `+${metrics.improvement}秒` : `${metrics.improvement}秒`),
           fmt(avg)
         );
@@ -5037,7 +5071,7 @@
 
     function normalizedDailySectionRows(section) {
       const baseHeaders = ["組", "出發序", "課表組", "課表內容", "含休", "姓名"];
-      const metricHeaders = ["完成", "PB", "PB趟次", "最新", "進步", "平均"];
+      const metricHeaders = ["完成", "PB", "PB趟次", "首末差", "平均"];
       const maxTrips = Math.max(0, ...section.records.map((record) => record.tripCount));
       const headers = [
         ...baseHeaders,
