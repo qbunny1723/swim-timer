@@ -363,7 +363,6 @@
     .input-section { order: 1; grid-column: 1; }
     .floating-settings { order: 2; grid-column: 1; }
     .manual-section { order: 3; grid-column: 1; }
-    .save-section { order: 4; grid-column: 1; }
     .summary-section { order: 5; grid-column: 2; grid-row: 1 / span 4; }
     .snapshot-section { order: 6; grid-column: 1 / -1; }
     .raw-section { order: 7; grid-column: 1 / -1; }
@@ -1955,7 +1954,6 @@
       .input-section,
       .floating-settings,
       .manual-section,
-      .save-section,
       .snapshot-section,
       .summary-section,
       .raw-section {
@@ -2222,37 +2220,7 @@
         </div>
       </section>
 
-      <section class="save-section" style="margin-top:16px;">
-        <div class="section-title">本組資訊</div>
-        <div class="body">
-          <div class="save-row">
-            <div class="save-field">
-              <label class="save-label">日期</label>
-              <input id="resultDate" type="date" class="save-input">
-            </div>
-            <div class="save-field">
-              <label class="save-label">組別</label>
-              <select id="groupTitle" class="save-input">
-                <option>第1組</option>
-                <option>第2組</option>
-                <option>第3組</option>
-                <option>第4組</option>
-                <option>第5組</option>
-                <option>第6組</option>
-                <option>第7組</option>
-                <option>第8組</option>
-              </select>
-            </div>
-          </div>
-          <p class="small" style="display:flex;align-items:center;gap:5px;margin-top:8px;">日期與組別會用在暫存紀錄。</p>
-          <div class="button-row" style="margin-top:8px;">
-            <button id="exportBtn" class="secondary">匯出 CSV</button>
-            <button id="copyBtn" class="secondary">複製表格</button>
-            <button id="resetBtn" class="danger">清空結果</button>
-            <button id="focusResultBtn" class="secondary">檢查整理表</button>
-          </div>
-        </div>
-      </section>
+      <input id="resultDate" type="hidden">
     </div>
 
     <section class="summary-section">
@@ -3497,6 +3465,10 @@
       return `第${value}組`;
     }
 
+    function currentResultDate() {
+      return el("resultDate")?.value || new Date().toISOString().slice(0, 10);
+    }
+
     function collectMixRowDrafts() {
       const rows = [];
       document.querySelectorAll("#mixRows .mix-row").forEach((row, index) => {
@@ -4192,7 +4164,7 @@
       addEntry(name, action, time, "手動補記", true, parseDeduct(el("manualTime").value.trim()));
     });
 
-    el("resetBtn").addEventListener("click", () => {
+    el("resetBtn")?.addEventListener("click", () => {
       if (!confirm("確定清空整理結果？左邊口令文字會保留。")) return;
       state.entries = [];
       state.issues = [];
@@ -4222,7 +4194,7 @@
       parseAll();
     });
 
-    el("copyBtn").addEventListener("click", async () => {
+    el("copyBtn")?.addEventListener("click", async () => {
       const text = summaryText();
       try {
         await navigator.clipboard.writeText(text);
@@ -4232,7 +4204,7 @@
       }
     });
 
-    el("exportBtn").addEventListener("click", () => {
+    el("exportBtn")?.addEventListener("click", () => {
       const csv = "\uFEFF" + summaryCsv();
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
       const a = document.createElement("a");
@@ -4242,7 +4214,7 @@
       URL.revokeObjectURL(a.href);
     });
 
-    el("focusResultBtn").addEventListener("click", () => {
+    el("focusResultBtn")?.addEventListener("click", () => {
       el("summaryTable").scrollIntoView({ behavior: "smooth", block: "start" });
     });
 
@@ -4280,11 +4252,11 @@
         setStatus("目前沒有整理結果可以暫存。", "bad");
         return;
       }
-      const title = el("groupTitle").value.trim() || `第${snapshots.length + 1}組`;
+      const title = sessionGroupLabel() || `第${snapshots.length + 1}組`;
       const plan = lanePlanPayload();
       const snapshot = normalizeSnapshot({
         title,
-        date: el("resultDate").value || new Date().toISOString().slice(0, 10),
+        date: currentResultDate(),
         commandText: el("commandBox").value,
         createdAt: new Date().toISOString(),
         entries: state.entries.map(cloneEntry),
@@ -4317,7 +4289,8 @@
       state.issues = snapshot.issues.slice();
       state.summaryMetaOverrides = {};
       el("commandBox").value = snapshot.commandText || "";
-      if (el("groupTitle")) el("groupTitle").value = snapshot.title || `第${index + 1}組`;
+      const titleMatch = String(snapshot.title || "").match(/\d+/);
+      if (el("sessionGroup") && titleMatch) el("sessionGroup").value = titleMatch[0];
       if (el("resultDate")) el("resultDate").value = snapshot.date || new Date().toISOString().slice(0, 10);
       const charCount = el("charCount");
       if (charCount) charCount.textContent = `${el("commandBox").value.length} / 300`;
@@ -4512,8 +4485,8 @@
     }
 
     async function saveResultToDrive() {
-      const date = el("resultDate").value;
-      const title = el("groupTitle").value.trim();
+      const date = currentResultDate();
+      const title = sessionGroupLabel();
       const summary = summaryRows();
       if (!date) {
         setStatus("請先選擇日期。", "bad");
@@ -4543,7 +4516,7 @@
         setStatus("目前沒有暫存紀錄可以上傳。", "bad");
         return;
       }
-      const fallbackDate = el("resultDate").value || new Date().toISOString().slice(0, 10);
+      const fallbackDate = currentResultDate();
       setStatus(`正在上傳 ${snapshots.length} 組暫存紀錄...`, "good");
       try {
         for (const snapshot of snapshots) {
@@ -4566,7 +4539,7 @@
         setStatus("目前沒有暫存紀錄可以上傳總表。", "bad");
         return;
       }
-      const fallbackDate = el("resultDate").value || new Date().toISOString().slice(0, 10);
+      const fallbackDate = currentResultDate();
       const totalSheetName = `${fallbackDate}總表`;
       setStatus(`正在上傳整理總表到 ${totalSheetName}...`, "good");
       try {
@@ -4592,7 +4565,7 @@
         setStatus("目前沒有暫存紀錄可以下載教練 Excel。", "bad");
         return;
       }
-      const fallbackDate = el("resultDate").value || new Date().toISOString().slice(0, 10);
+      const fallbackDate = currentResultDate();
       const rows = dailySummaryRows(fallbackDate);
       if (!rows.length) {
         setStatus("請先在暫存紀錄中標記 A/B/C/D 課表，才有總表可下載。", "bad");
@@ -4649,8 +4622,7 @@
     setupStudentSettingsCard();
     loadLanePlanLocal();
     loadSnapshotsLocal();
-    if (!el("resultDate").value) el("resultDate").value = new Date().toISOString().slice(0, 10);
-    if (!el("groupTitle").value) el("groupTitle").value = "第1組";
+    if (el("resultDate") && !el("resultDate").value) el("resultDate").value = new Date().toISOString().slice(0, 10);
     render();
     renderSnapshotList();
     renderMixRows();
