@@ -1202,6 +1202,19 @@
       font-size: 13px;
     }
 
+    .snapshot-course-settings {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: var(--accent-soft);
+      display: grid;
+      gap: 10px;
+    }
+
+    .snapshot-course-row {
+      align-items: end;
+    }
+
     .snapshot-preview {
       display: grid;
       gap: 12px;
@@ -2358,8 +2371,111 @@
       };
     }
 
+    function normalizeCourseSettings(settings = {}) {
+      const rows = Array.isArray(settings.rows) ? settings.rows : [];
+      const defaultGroup = Math.max(1, Math.min(COURSE_GROUPS.length, Number(settings.defaultGroup) || Number(rows[0]?.group) || 1));
+      const mixed = !!settings.mixed;
+      const mixCount = mixed
+        ? Math.max(2, Math.min(COURSE_GROUPS.length, Number(settings.mixCount) || rows.length || 2))
+        : 1;
+      const normalizedRows = Array.from({ length: mixCount }, (_, index) => {
+        const draft = rows[index] || {};
+        const group = index === 0
+          ? defaultGroup
+          : Math.max(1, Math.min(COURSE_GROUPS.length, Number(draft.group) || index + 1));
+        return {
+          group,
+          item: draft.item || "",
+          timeRaw: draft.timeRaw || "",
+          intervalRaw: draft.intervalRaw || "",
+        };
+      });
+      return {
+        sessionGroup: String(settings.sessionGroup || "1"),
+        mixed,
+        defaultGroup,
+        mixCount,
+        rows: normalizedRows,
+      };
+    }
+
+    function currentCourseSettings() {
+      return normalizeCourseSettings({
+        sessionGroup: el("sessionGroup")?.value || "1",
+        mixed: !!el("mixedYes")?.checked,
+        defaultGroup: defaultCourseGroupValue(),
+        mixCount: Number(el("mixCount")?.value) || 2,
+        rows: mixPlanRows().map((row) => ({
+          group: row.group,
+          item: row.item,
+          timeRaw: row.timeRaw,
+          intervalRaw: row.intervalRaw,
+        })),
+      });
+    }
+
+    function applyCourseSettingsToMain(settings) {
+      const normalized = normalizeCourseSettings(settings);
+      if (el("sessionGroup")) el("sessionGroup").value = normalized.sessionGroup || "1";
+      if (el("mixedYes")) el("mixedYes").checked = normalized.mixed;
+      if (el("mixedNo")) el("mixedNo").checked = !normalized.mixed;
+      if (el("defaultCourseGroup")) el("defaultCourseGroup").value = String(normalized.defaultGroup);
+      if (el("mixCount")) el("mixCount").value = String(normalized.mixCount);
+      renderMixRows();
+      normalized.rows.forEach((row, index) => {
+        if (el(`mixGroup${index}`)) el(`mixGroup${index}`).value = String(row.group);
+        if (el(`mixItem${index}`)) el(`mixItem${index}`).value = row.item || "";
+        if (el(`mixTime${index}`)) el(`mixTime${index}`).value = row.timeRaw || "";
+        if (el(`mixInterval${index}`)) el(`mixInterval${index}`).value = row.intervalRaw || "";
+      });
+    }
+
+    function coursePlanRowsFromSettings(settings) {
+      const normalized = normalizeCourseSettings(settings);
+      return normalized.rows.map((row, index) => ({
+        index,
+        group: row.group,
+        groupLabel: courseGroupLetter(row.group),
+        item: row.item || `課表內容${courseGroupLetter(row.group)}`,
+        timeRaw: row.timeRaw || "",
+        time: parseTime(row.timeRaw || ""),
+        intervalRaw: row.intervalRaw || "",
+      }));
+    }
+
+    function activeCoursePlanRowsFromSettings(settings) {
+      const seen = new Set();
+      return coursePlanRowsFromSettings(settings).filter((row) => {
+        if (!row?.group || seen.has(row.group)) return false;
+        seen.add(row.group);
+        return true;
+      });
+    }
+
+    function summaryMetaForContext(name, entries, settings, overrides = {}) {
+      const defaults = defaultPersonOrder(entries);
+      const personOrder = Number(overrides[name]?.personOrder || defaults[name] || "");
+      const plan = activeCoursePlanRowsFromSettings(settings);
+      const normalized = normalizeCourseSettings(settings);
+      const overriddenGroup = Number(overrides[name]?.courseGroup || 0);
+      const chosenGroup = plan.some((row) => row.group === overriddenGroup) ? overriddenGroup : normalized.defaultGroup;
+      const planRow = plan.find((row) => row.group === chosenGroup) || plan[0] || {};
+      return {
+        personOrder: personOrder || "",
+        courseGroup: planRow.group || normalized.defaultGroup,
+        groupLabel: courseGroupLetter(planRow.group || normalized.defaultGroup),
+        item: planRow.item || "",
+        timeRaw: planRow.timeRaw || "",
+        time: planRow.time || null,
+        planIndex: Number.isFinite(planRow.index) ? planRow.index : 0,
+      };
+    }
+
     function normalizeSnapshot(snapshot, index = 0) {
       const lanes = snapshot?.lanes || {};
+      const courseSettings = normalizeCourseSettings(snapshot?.courseSettings || {
+        sessionGroup: snapshot?.sessionGroup || String(index + 1),
+      });
       return {
         id: snapshot?.id || `${Date.now()}-${Math.random()}`,
         title: snapshot?.title || `第${index + 1}組`,
@@ -2368,7 +2484,8 @@
         createdAt: snapshot?.createdAt || new Date().toISOString(),
         entries: Array.isArray(snapshot?.entries) ? snapshot.entries.map(cloneEntry) : [],
         issues: Array.isArray(snapshot?.issues) ? snapshot.issues : [],
-        sessionGroup: snapshot?.sessionGroup || "",
+        sessionGroup: courseSettings.sessionGroup,
+        courseSettings,
         summaryMetaOverrides: snapshot?.summaryMetaOverrides || {},
         summaryTableRows: Array.isArray(snapshot?.summaryTableRows)
           ? snapshot.summaryTableRows.map((row) => Array.isArray(row) ? row.slice() : [row])
@@ -3769,7 +3886,7 @@
         <tbody>${rawRows || issueRows ? rawRows + issueRows : `<tr><td colspan="6">尚無紀錄。</td></tr>`}</tbody>`;
     }
 
-    function renderSnapshotList() {
+    function renderSnapshotList(openIndex = null) {
       const list = el("snapshotList");
       if (!list) return;
       if (!snapshots.length) {
@@ -3778,21 +3895,25 @@
       }
 
       list.innerHTML = snapshots.map((snapshot, index) => {
-        const summaryRows = snapshot.summaryTableRows?.length
-          ? snapshot.summaryTableRows
-          : currentSummaryTableRows(snapshot.entries || []);
+        snapshot.summaryTableRows = currentSummaryTableRows(snapshot.entries || [], {
+          courseSettings: snapshot.courseSettings,
+          summaryMetaOverrides: snapshot.summaryMetaOverrides || {},
+        });
+        const settingsHtml = renderSnapshotCourseSettings(snapshot, index);
+        const summaryHtml = renderSnapshotEditableSummaryTable(snapshot, index);
 
         return `
-          <details class="snapshot-card">
+          <details class="snapshot-card"${openIndex === index ? " open" : ""}>
             <summary><span>${escapeHtml(snapshotLabel(snapshot, index))}</span><span>${escapeHtml(snapshot.date || "")}</span></summary>
             <div class="snapshot-body">
               <details class="snapshot-raw">
                 <summary class="save-label">原始語音輸入文字</summary>
                 <textarea readonly>${escapeHtml(snapshot.commandText || "")}</textarea>
               </details>
+              ${settingsHtml}
               <div>
                 <div class="save-label" style="margin-bottom:8px;">暫存整理表</div>
-                <div class="snapshot-preview">${tableHtmlFromRows(summaryRows)}</div>
+                <div class="snapshot-preview">${summaryHtml}</div>
               </div>
               <div class="button-row">
                 <button data-load-snapshot="${index}" class="secondary">載入這組</button>
@@ -3802,12 +3923,175 @@
           </details>`;
       }).join("");
 
+      list.querySelectorAll("[data-snapshot-setting]").forEach((input) => {
+        input.addEventListener("change", () => updateSnapshotSetting(input));
+      });
+      list.querySelectorAll("[data-snapshot-course-row]").forEach((input) => {
+        input.addEventListener("change", () => updateSnapshotCourseRow(input));
+      });
+      list.querySelectorAll("[data-snapshot-person-order]").forEach((input) => {
+        input.addEventListener("change", () => {
+          const snapshot = snapshots[Number(input.dataset.snapshotIndex)];
+          if (!snapshot) return;
+          const name = input.dataset.snapshotPersonOrder;
+          snapshot.summaryMetaOverrides ||= {};
+          snapshot.summaryMetaOverrides[name] ||= {};
+          snapshot.summaryMetaOverrides[name].personOrder = Number(input.value) || "";
+          refreshSnapshotSummary(snapshot, Number(input.dataset.snapshotIndex));
+        });
+      });
+      list.querySelectorAll("[data-snapshot-course-group]").forEach((select) => {
+        select.addEventListener("change", () => {
+          const snapshot = snapshots[Number(select.dataset.snapshotIndex)];
+          if (!snapshot) return;
+          const name = select.dataset.snapshotCourseGroup;
+          snapshot.summaryMetaOverrides ||= {};
+          snapshot.summaryMetaOverrides[name] ||= {};
+          snapshot.summaryMetaOverrides[name].courseGroup = Number(select.value) || 1;
+          refreshSnapshotSummary(snapshot, Number(select.dataset.snapshotIndex));
+        });
+      });
       list.querySelectorAll("[data-load-snapshot]").forEach((button) => {
         button.addEventListener("click", () => loadSnapshot(Number(button.dataset.loadSnapshot)));
       });
       list.querySelectorAll("[data-delete-snapshot]").forEach((button) => {
         button.addEventListener("click", () => deleteSnapshot(Number(button.dataset.deleteSnapshot)));
       });
+    }
+
+    function renderSnapshotCourseSettings(snapshot, index) {
+      const settings = normalizeCourseSettings(snapshot.courseSettings);
+      const rows = coursePlanRowsFromSettings(settings);
+      const defaultOptions = COURSE_GROUPS.map((label, groupIndex) =>
+        `<option value="${groupIndex + 1}"${settings.defaultGroup === groupIndex + 1 ? " selected" : ""}>${label}</option>`
+      ).join("");
+      const courseRows = rows.map((row, rowIndex) => `
+        <div class="mix-row snapshot-course-row">
+          ${rowIndex === 0
+            ? `<div class="mix-group-label">${escapeHtml(row.groupLabel)}</div>`
+            : `<select class="mix-group-select" data-snapshot-index="${index}" data-snapshot-course-row="${rowIndex}" data-snapshot-course-field="group" aria-label="課表組">
+                ${COURSE_GROUPS.map((label, groupIndex) => `<option value="${groupIndex + 1}"${row.group === groupIndex + 1 ? " selected" : ""}>${label}</option>`).join("")}
+              </select>`}
+          <div>
+            <label>課表內容</label>
+            <input data-snapshot-index="${index}" data-snapshot-course-row="${rowIndex}" data-snapshot-course-field="item" type="text" placeholder="例：100自" value="${escapeHtml(row.item || "")}">
+          </div>
+          <div>
+            <label>含休</label>
+            <div class="mix-inline">
+              <input data-snapshot-index="${index}" data-snapshot-course-row="${rowIndex}" data-snapshot-course-field="timeRaw" type="text" inputmode="numeric" placeholder="150" value="${escapeHtml(row.timeRaw || "")}">
+              <span class="mix-suffix">含休</span>
+            </div>
+          </div>
+          <div>
+            <label>出發間隔</label>
+            <div class="mix-inline">
+              <input data-snapshot-index="${index}" data-snapshot-course-row="${rowIndex}" data-snapshot-course-field="intervalRaw" type="text" inputmode="numeric" placeholder="5" value="${escapeHtml(row.intervalRaw || "")}">
+              <span class="mix-suffix">秒出發</span>
+            </div>
+          </div>
+        </div>
+      `).join("");
+      return `
+        <div class="snapshot-course-settings">
+          <div class="save-label" style="margin-bottom:8px;">課表設定</div>
+          <div class="mix-top-row">
+            <div class="session-group-control">
+              <span>第</span>
+              <input data-snapshot-index="${index}" data-snapshot-setting="sessionGroup" type="text" inputmode="numeric" value="${escapeHtml(settings.sessionGroup || "1")}">
+              <span>組</span>
+            </div>
+            <div class="mix-options">
+              <span class="mix-options-title">是否混組</span>
+              <label><input data-snapshot-index="${index}" data-snapshot-setting="mixed" type="radio" name="snapshotMixed${index}" value="yes"${settings.mixed ? " checked" : ""}> 是</label>
+              <label><input data-snapshot-index="${index}" data-snapshot-setting="mixed" type="radio" name="snapshotMixed${index}" value="no"${!settings.mixed ? " checked" : ""}> 否</label>
+            </div>
+          </div>
+          <div class="mix-control-row">
+            <div>
+              <label>預設課表</label>
+              <select data-snapshot-index="${index}" data-snapshot-setting="defaultGroup">${defaultOptions}</select>
+            </div>
+            <div${settings.mixed ? "" : " hidden"}>
+              <label>課表組數</label>
+              <input data-snapshot-index="${index}" data-snapshot-setting="mixCount" type="number" min="2" max="${COURSE_GROUPS.length}" value="${settings.mixCount}">
+            </div>
+          </div>
+          <div class="mix-rows">${courseRows}</div>
+        </div>
+      `;
+    }
+
+    function renderSnapshotEditableSummaryTable(snapshot, index) {
+      const rows = currentSummaryTableRows(snapshot.entries || [], {
+        courseSettings: snapshot.courseSettings,
+        summaryMetaOverrides: snapshot.summaryMetaOverrides || {},
+      });
+      if (!rows.length) return "";
+      const [headers, ...bodyRows] = rows;
+      const plan = activeCoursePlanRowsFromSettings(snapshot.courseSettings);
+      const courseOptions = (selected) => plan.map((row) =>
+        `<option value="${row.group}"${String(selected) === row.groupLabel || Number(selected) === row.group ? " selected" : ""}>${row.groupLabel}</option>`
+      ).join("");
+      return `
+        <div class="table-wrap">
+          <table>
+            <thead><tr>${headers.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead>
+            <tbody>${bodyRows.length ? bodyRows.map((row) => {
+              const name = row[5] || "";
+              return `<tr>${row.map((cell, cellIndex) => {
+                if (cellIndex === 1) {
+                  return `<td><input class="person-order-input" data-snapshot-index="${index}" data-snapshot-person-order="${escapeHtml(name)}" type="number" min="1" value="${escapeHtml(cell)}"></td>`;
+                }
+                if (cellIndex === 2) {
+                  return `<td><select class="course-group-select" data-snapshot-index="${index}" data-snapshot-course-group="${escapeHtml(name)}">${courseOptions(cell)}</select></td>`;
+                }
+                const isScore = headers[cellIndex]?.includes("趟成績");
+                const isPb = headers[cellIndex] === "PB" || headers[cellIndex] === "最新";
+                const isProgress = headers[cellIndex] === "進步";
+                const className = isScore || isPb ? "result" : isProgress ? (String(cell).startsWith("+") ? "metric-good" : "metric-muted") : "";
+                return `<td${className ? ` class="${className}"` : ""}>${escapeHtml(cell)}</td>`;
+              }).join("")}</tr>`;
+            }).join("") : `<tr><td colspan="${headers.length}">尚無學生。</td></tr>`}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function refreshSnapshotSummary(snapshot, index) {
+      snapshot.courseSettings = normalizeCourseSettings(snapshot.courseSettings);
+      snapshot.sessionGroup = snapshot.courseSettings.sessionGroup;
+      snapshot.title = `第${snapshot.courseSettings.sessionGroup || 1}組`;
+      snapshot.summaryTableRows = currentSummaryTableRows(snapshot.entries || [], {
+        courseSettings: snapshot.courseSettings,
+        summaryMetaOverrides: snapshot.summaryMetaOverrides || {},
+      });
+      saveSnapshotsLocal();
+      renderSnapshotList(index);
+    }
+
+    function updateSnapshotSetting(input) {
+      const index = Number(input.dataset.snapshotIndex);
+      const snapshot = snapshots[index];
+      if (!snapshot) return;
+      snapshot.courseSettings = normalizeCourseSettings(snapshot.courseSettings);
+      const field = input.dataset.snapshotSetting;
+      if (field === "mixed") snapshot.courseSettings.mixed = input.value === "yes";
+      else if (field === "defaultGroup") snapshot.courseSettings.defaultGroup = Number(input.value) || 1;
+      else if (field === "mixCount") snapshot.courseSettings.mixCount = Number(input.value) || 2;
+      else if (field === "sessionGroup") snapshot.courseSettings.sessionGroup = input.value || "1";
+      refreshSnapshotSummary(snapshot, index);
+    }
+
+    function updateSnapshotCourseRow(input) {
+      const index = Number(input.dataset.snapshotIndex);
+      const snapshot = snapshots[index];
+      if (!snapshot) return;
+      const rowIndex = Number(input.dataset.snapshotCourseRow);
+      const field = input.dataset.snapshotCourseField;
+      snapshot.courseSettings = normalizeCourseSettings(snapshot.courseSettings);
+      snapshot.courseSettings.rows[rowIndex] ||= {};
+      snapshot.courseSettings.rows[rowIndex][field] = input.value;
+      refreshSnapshotSummary(snapshot, index);
     }
 
     function entriesForNames(entries, names) {
@@ -4178,6 +4462,7 @@
       }
       const title = sessionGroupLabel() || `第${snapshots.length + 1}組`;
       const plan = lanePlanPayload();
+      const courseSettings = currentCourseSettings();
       const snapshot = normalizeSnapshot({
         title,
         date: currentResultDate(),
@@ -4185,9 +4470,13 @@
         createdAt: new Date().toISOString(),
         entries: state.entries.map(cloneEntry),
         issues: state.issues.slice(),
-        sessionGroup: el("sessionGroup")?.value || "",
+        sessionGroup: courseSettings.sessionGroup,
+        courseSettings,
         summaryMetaOverrides: JSON.parse(JSON.stringify(state.summaryMetaOverrides || {})),
-        summaryTableRows: currentSummaryTableRows(),
+        summaryTableRows: currentSummaryTableRows(state.entries, {
+          courseSettings,
+          summaryMetaOverrides: state.summaryMetaOverrides || {},
+        }),
         lanes: {
           A: { students: plan.laneAStudents, workout: plan.laneAWorkout },
           B: { students: plan.laneBStudents, workout: plan.laneBWorkout },
@@ -4216,8 +4505,7 @@
       state.issues = snapshot.issues.slice();
       state.summaryMetaOverrides = JSON.parse(JSON.stringify(snapshot.summaryMetaOverrides || {}));
       el("commandBox").value = snapshot.commandText || "";
-      const titleMatch = String(snapshot.title || "").match(/\d+/);
-      if (el("sessionGroup")) el("sessionGroup").value = snapshot.sessionGroup || titleMatch?.[0] || "1";
+      applyCourseSettingsToMain(snapshot.courseSettings || { sessionGroup: snapshot.sessionGroup || "1" });
       if (el("resultDate")) el("resultDate").value = snapshot.date || new Date().toISOString().slice(0, 10);
       const charCount = el("charCount");
       if (charCount) charCount.textContent = `${el("commandBox").value.length} / 300`;
@@ -4330,13 +4618,22 @@
       return rows;
     }
 
-    function currentSummaryTableRows(entries = state.entries) {
+    function currentSummaryTableRows(entries = state.entries, options = {}) {
+      const settings = normalizeCourseSettings(options.courseSettings || currentCourseSettings());
+      const overrides = options.summaryMetaOverrides || state.summaryMetaOverrides;
+      const visibleTrips = Math.max(0, ...grouped(entries).map(({ trips }) => {
+        let last = 0;
+        trips.forEach((trip, index) => {
+          if (trip.back && (trip.start || (trip.back.deductSeconds || 0))) last = index + 1;
+        });
+        return last;
+      }));
       const headers = ["組", "出發序", "課表組", "課表內容", "含休", "姓名"];
-      for (let i = 1; i <= maxTrips; i++) headers.push(`第${i}趟成績`);
+      for (let i = 1; i <= visibleTrips; i++) headers.push(`第${i}趟成績`);
       headers.push("完成", "PB", "PB趟次", "最新", "進步", "平均");
       const rows = [headers];
       grouped(entries).forEach(({ name, trips }) => {
-        const meta = summaryMetaForName(name, entries);
+        const meta = summaryMetaForContext(name, entries, settings, overrides);
         const results = trips.map((trip) => {
           if (!trip.back) return null;
           if (!trip.start && !(trip.back.deductSeconds || 0)) return null;
@@ -4351,14 +4648,14 @@
         const metrics = swimmerMetrics(trips);
         const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "";
         const row = [
-          sessionGroupLabel(),
+          `第${settings.sessionGroup || 1}組`,
           meta.personOrder,
           courseGroupLetter(meta.courseGroup),
           meta.item,
           meta.timeRaw,
           name,
         ];
-        results.forEach((result, index) => {
+        results.slice(0, visibleTrips).forEach((result, index) => {
           if (result === null) {
             row.push("");
             return;
@@ -4435,12 +4732,18 @@
       rows.push([snapshot.commandText || ""]);
       rows.push([]);
       rows.push(["暫存整理表"]);
-      rows.push(...(snapshot.summaryTableRows?.length ? snapshot.summaryTableRows : currentSummaryTableRows(snapshot.entries || [])));
+      rows.push(...(snapshot.summaryTableRows?.length ? snapshot.summaryTableRows : currentSummaryTableRows(snapshot.entries || [], {
+        courseSettings: snapshot.courseSettings,
+        summaryMetaOverrides: snapshot.summaryMetaOverrides || {},
+      })));
       return rows;
     }
 
     function snapshotSummaryOnlyRows(snapshot) {
-      return snapshot.summaryTableRows?.length ? snapshot.summaryTableRows : currentSummaryTableRows(snapshot.entries || []);
+      return snapshot.summaryTableRows?.length ? snapshot.summaryTableRows : currentSummaryTableRows(snapshot.entries || [], {
+        courseSettings: snapshot.courseSettings,
+        summaryMetaOverrides: snapshot.summaryMetaOverrides || {},
+      });
     }
 
     function dailySummaryRows(fallbackDate) {
