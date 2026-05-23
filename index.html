@@ -1194,6 +1194,25 @@
 
     .snapshot-raw summary {
       cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      list-style: none;
+    }
+
+    .snapshot-raw summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .snapshot-raw summary::after {
+      content: "∨";
+      font-weight: 950;
+      color: var(--accent);
+    }
+
+    .snapshot-raw[open] summary::after {
+      content: "∧";
     }
 
     .snapshot-raw textarea {
@@ -3929,6 +3948,18 @@
       list.querySelectorAll("[data-snapshot-course-row]").forEach((input) => {
         input.addEventListener("change", () => updateSnapshotCourseRow(input));
       });
+      list.querySelectorAll("[data-snapshot-course-preset]").forEach((select) => {
+        select.addEventListener("change", () => {
+          if (!select.value || select.value === "custom") return;
+          const snapshot = snapshots[Number(select.dataset.snapshotIndex)];
+          if (!snapshot) return;
+          const rowIndex = Number(select.dataset.snapshotCoursePreset);
+          snapshot.courseSettings = normalizeCourseSettings(snapshot.courseSettings);
+          snapshot.courseSettings.rows[rowIndex] ||= {};
+          snapshot.courseSettings.rows[rowIndex].item = select.value;
+          refreshSnapshotSummary(snapshot, Number(select.dataset.snapshotIndex));
+        });
+      });
       list.querySelectorAll("[data-snapshot-person-order]").forEach((input) => {
         input.addEventListener("change", () => {
           const snapshot = snapshots[Number(input.dataset.snapshotIndex)];
@@ -3974,7 +4005,18 @@
               </select>`}
           <div>
             <label>課表內容</label>
-            <input data-snapshot-index="${index}" data-snapshot-course-row="${rowIndex}" data-snapshot-course-field="item" type="text" placeholder="例：100自" value="${escapeHtml(row.item || "")}">
+            <div class="mix-item-control">
+              <input data-snapshot-index="${index}" data-snapshot-course-row="${rowIndex}" data-snapshot-course-field="item" type="text" placeholder="例：100自" value="${escapeHtml(row.item || "")}">
+              <select data-snapshot-course-preset="${rowIndex}" data-snapshot-index="${index}" aria-label="常用項目">
+                <option value="">選</option>
+                <option value="100自">100自</option>
+                <option value="200自">200自</option>
+                <option value="75自">75自</option>
+                <option value="50自">50自</option>
+                <option value="200混">200混</option>
+                <option value="custom">自訂</option>
+              </select>
+            </div>
           </div>
           <div>
             <label>含休</label>
@@ -4050,11 +4092,29 @@
                 const isPb = headers[cellIndex] === "PB" || headers[cellIndex] === "最新";
                 const isProgress = headers[cellIndex] === "進步";
                 const className = isScore || isPb ? "result" : isProgress ? (String(cell).startsWith("+") ? "metric-good" : "metric-muted") : "";
-                return `<td${className ? ` class="${className}"` : ""}>${escapeHtml(cell)}</td>`;
+                const content = isScore ? formatSnapshotScoreCell(cell) : escapeHtml(cell);
+                return `<td${className ? ` class="${className}"` : ""}>${content}</td>`;
               }).join("")}</tr>`;
             }).join("") : `<tr><td colspan="${headers.length}">尚無學生。</td></tr>`}</tbody>
           </table>
         </div>`;
+    }
+
+    function formatSnapshotScoreCell(value) {
+      const text = String(value || "").trim();
+      if (!text) return "";
+      const timeMatch = text.match(/^(\S+)/);
+      const rankMatch = text.match(/#(\d+)/);
+      const diffMatch = text.match(/([+-]\d+秒)/);
+      const rank = rankMatch ? Number(rankMatch[1]) : 0;
+      const rankClass = rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : rank ? "rank-4up" : "";
+      const diffValue = diffMatch ? Number(diffMatch[1].replace("秒", "")) : null;
+      const diffClass = Number.isFinite(diffValue) ? (diffValue > 0 ? "cycle-diff-plus" : "cycle-diff-minus") : "";
+      return [
+        timeMatch ? escapeHtml(timeMatch[1]) : escapeHtml(text),
+        rank ? `<span class="rank-badge ${rankClass}">#${rank}</span>` : "",
+        diffMatch ? `<span class="cycle-diff-badge ${diffClass}">${escapeHtml(diffMatch[1])}</span>` : "",
+      ].filter(Boolean).join("");
     }
 
     function refreshSnapshotSummary(snapshot, index) {
