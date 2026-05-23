@@ -2238,7 +2238,7 @@
         <table id="summaryTable"></table>
       </div>
       <div class="see-detail-row">
-        <button class="see-detail-btn" id="focusResultBtn2">點擊成績看明細 ∨</button>
+        <button class="see-detail-btn" id="snapshotBtn">暫存本組並清空</button>
       </div>
     </section>
 
@@ -2249,7 +2249,6 @@
       </div>
       <div class="body">
         <div class="snapshot-actions">
-          <button id="snapshotBtn">暫存本組並清空</button>
           <button id="uploadSnapshotsBtn" class="btn-save-coral">全部上傳</button>
           <button id="uploadSummaryBtn" class="secondary">上傳整理總表</button>
           <button id="coachExcelBtn" class="secondary">下載教練Excel</button>
@@ -3935,7 +3934,6 @@
                 <div class="snapshot-preview">${summaryHtml}</div>
               </div>
               <div class="button-row">
-                <button data-load-snapshot="${index}" class="secondary">載入這組</button>
                 <button data-delete-snapshot="${index}" class="danger">刪除這組</button>
               </div>
             </div>
@@ -3981,9 +3979,6 @@
           snapshot.summaryMetaOverrides[name].courseGroup = Number(select.value) || 1;
           refreshSnapshotSummary(snapshot, Number(select.dataset.snapshotIndex));
         });
-      });
-      list.querySelectorAll("[data-load-snapshot]").forEach((button) => {
-        button.addEventListener("click", () => loadSnapshot(Number(button.dataset.loadSnapshot)));
       });
       list.querySelectorAll("[data-delete-snapshot]").forEach((button) => {
         button.addEventListener("click", () => deleteSnapshot(Number(button.dataset.deleteSnapshot)));
@@ -4449,12 +4444,6 @@
       });
     }
 
-    // Wire focusResultBtn2
-    const frb2 = el("focusResultBtn2");
-    if (frb2) frb2.addEventListener("click", () => {
-      el("summaryTable").scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-
     el("demoBtn")?.addEventListener("click", () => {
       el("commandBox").value = "林立誠000出發，方瑞傑005出發，盧冠宇010出發，林立誠110回來，盧冠宇200回來，方瑞傑130回來，林立誠230出發，林立誠340回來，請整理";
       parseAll();
@@ -4554,21 +4543,6 @@
       if (charCount) charCount.textContent = "0 / 300";
       render();
       setStatus(`已暫存 ${snapshot.title}，可以直接開始記錄下一組。`, "good");
-    }
-
-    function loadSnapshot(index) {
-      const snapshot = snapshots[index];
-      if (!snapshot) return;
-      state.entries = snapshot.entries.map(cloneEntry);
-      state.issues = snapshot.issues.slice();
-      state.summaryMetaOverrides = JSON.parse(JSON.stringify(snapshot.summaryMetaOverrides || {}));
-      el("commandBox").value = snapshot.commandText || "";
-      applyCourseSettingsToMain(snapshot.courseSettings || { sessionGroup: snapshot.sessionGroup || "1" });
-      if (el("resultDate")) el("resultDate").value = snapshot.date || new Date().toISOString().slice(0, 10);
-      const charCount = el("charCount");
-      if (charCount) charCount.textContent = `${el("commandBox").value.length} / 300`;
-      render();
-      setStatus(`已載入 ${snapshot.title} 到整理表。`, "good");
     }
 
     function deleteSnapshot(index) {
