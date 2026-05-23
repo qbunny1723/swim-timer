@@ -2303,10 +2303,12 @@
     const SETTINGS_KEY = "swimTimerSettings";
     const LANE_PLAN_KEY = "swimTimerLanePlan";
     const SNAPSHOT_KEY = "swimTimerSnapshots";
+    const PB_DATA_KEY = "swimTimerPbData";
     const maxTrips = 6;
     const COURSE_GROUPS = ["A", "B", "C", "D", "E"];
     const state = { entries: [], issues: [], summaryMetaOverrides: {} };
     const parseState = { source: "", items: [], issues: [] };
+    const pbState = { headers: [], rows: [], byNameItem: new Map(), studentCount: 0, loadedAt: "" };
     let snapshots = [];
     let recognition = null;
     let listening = false;
@@ -2772,6 +2774,85 @@
         body: JSON.stringify(payload),
       });
       return res.json().catch(() => ({}));
+    }
+
+    function normalizePbItem(item) {
+      return String(item || "")
+        .trim()
+        .replace(/公尺|米/g, "")
+        .replace(/m/gi, "")
+        .replace(/自由/g, "自")
+        .replace(/\s+/g, "");
+    }
+
+    function parsePbSeconds(value) {
+      const text = String(value || "").trim();
+      if (!text || text === "—" || text.toUpperCase() === "DQ") return null;
+      const parts = text.split(":");
+      if (parts.length === 1) {
+        const seconds = Number(parts[0]);
+        return Number.isFinite(seconds) ? seconds : null;
+      }
+      if (parts.length === 2) {
+        const minutes = Number(parts[0]);
+        const seconds = Number(parts[1]);
+        if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) return null;
+        return Math.round((minutes * 60 + seconds) * 100) / 100;
+      }
+      return null;
+    }
+
+    function applyPbData(data, persist = false) {
+      if (!data || !Array.isArray(data.headers) || !Array.isArray(data.rows)) return false;
+      const nameIndex = data.headers.indexOf("姓名");
+      if (nameIndex < 0) return false;
+      const groupIndex = data.headers.indexOf("分組");
+      const itemIndexes = data.headers
+        .map((header, index) => ({ header: normalizePbItem(header), index }))
+        .filter(({ header, index }) => header && index !== nameIndex && index !== groupIndex);
+      const byNameItem = new Map();
+      const studentNames = new Set();
+      data.rows.forEach((row) => {
+        const name = String(row[nameIndex] || "").trim();
+        if (!name) return;
+        studentNames.add(name);
+        itemIndexes.forEach(({ header, index }) => {
+          const pb = String(row[index] || "").trim();
+          const seconds = parsePbSeconds(pb);
+          if (seconds === null) return;
+          byNameItem.set(`${name}|||${header}`, { name, item: header, pb, seconds });
+        });
+      });
+      pbState.headers = data.headers.slice();
+      pbState.rows = data.rows.map((row) => row.slice());
+      pbState.byNameItem = byNameItem;
+      pbState.studentCount = studentNames.size;
+      pbState.loadedAt = data.updatedAt || new Date().toISOString();
+      if (persist) {
+        try { localStorage.setItem(PB_DATA_KEY, JSON.stringify(data)); } catch {}
+      }
+      return true;
+    }
+
+    function getPb(name, item) {
+      return pbState.byNameItem.get(`${String(name || "").trim()}|||${normalizePbItem(item)}`) || null;
+    }
+
+    async function loadPbData() {
+      let usedLocal = false;
+      try {
+        const raw = localStorage.getItem(PB_DATA_KEY);
+        if (raw && applyPbData(JSON.parse(raw))) usedLocal = true;
+      } catch {}
+
+      try {
+        const result = await sheetAction({ action: "getPbData" });
+        if (!result?.ok || !applyPbData(result.data, true)) throw new Error("invalid-pb-data");
+        setStatus(`已載入 PB：${pbState.studentCount} 位學生。`, "good");
+      } catch {
+        if (usedLocal) setStatus(`已使用這台裝置的 PB 快取：${pbState.studentCount} 位學生。`, "good");
+        else setStatus("PB 尚未載入：請確認 Apps Script 已更新並重新部署。", "bad");
+      }
     }
 
     function applySettings(data) {
@@ -5091,7 +5172,7 @@
     render();
     renderSnapshotList();
     renderMixRows();
-    loadSettings();
+    loadSettings().finally(() => loadPbData());
   </script>
 </body>
 </html>
