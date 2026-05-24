@@ -362,7 +362,6 @@
     main > div { display: contents; }
     .input-section { order: 1; grid-column: 1; }
     .floating-settings { order: 2; grid-column: 1; }
-    .manual-section { order: 3; grid-column: 1; }
     .summary-section { order: 5; grid-column: 2; grid-row: 1 / span 4; }
     .snapshot-section { order: 6; grid-column: 1 / -1; }
     .raw-section { order: 7; grid-column: 1 / -1; }
@@ -2041,7 +2040,6 @@
       }
       .input-section,
       .floating-settings,
-      .manual-section,
       .snapshot-section,
       .summary-section,
       .raw-section {
@@ -2289,22 +2287,6 @@
         </div>
       </details>
       </div>
-
-      <section class="manual-section" style="margin-top:16px;">
-        <div class="section-title">手動補一筆</div>
-        <div class="body">
-          <div class="grid-4">
-            <input id="manualName" placeholder="姓名">
-            <input id="manualTime" placeholder="時間碼">
-            <select id="manualAction">
-              <option>出發</option>
-              <option>回來</option>
-            </select>
-            <button id="manualAddBtn">加入</button>
-          </div>
-          <p class="small">手動補記也可以填 005、110、1:10、1分10秒。</p>
-        </div>
-      </section>
 
       <input id="resultDate" type="hidden">
     </div>
@@ -4789,17 +4771,6 @@
     });
 
     el("focusInputBtn").addEventListener("click", runCommandPreview);
-
-    el("manualAddBtn").addEventListener("click", () => {
-      const name = el("manualName").value.trim();
-      const time = parseTime(el("manualTime").value.trim());
-      const action = el("manualAction").value;
-      if (!name || !time) {
-        setStatus("手動補記失敗：請確認姓名和時間碼。", "bad");
-        return;
-      }
-      addEntry(name, action, time, "手動補記", true, parseDeduct(el("manualTime").value.trim()));
-    });
 
     el("resetBtn")?.addEventListener("click", () => {
       if (!confirm("確定清空整理結果？左邊口令文字會保留。")) return;
