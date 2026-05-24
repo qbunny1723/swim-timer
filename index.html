@@ -702,6 +702,34 @@
     .status.good { color: var(--good); background: var(--accent-soft); }
     .status.bad { color: var(--bad); background: var(--accent-soft); }
 
+    .floating-status {
+      position: fixed;
+      left: 50%;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      transform: translate(-50%, 18px);
+      z-index: 10000;
+      width: min(520px, calc(100vw - 28px));
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid color-mix(in srgb, var(--accent), transparent 55%);
+      background: color-mix(in srgb, var(--panel), transparent 4%);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, .22);
+      color: var(--ink);
+      font-weight: 850;
+      line-height: 1.45;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease, transform .18s ease;
+    }
+
+    .floating-status.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    .floating-status.good { color: var(--good); }
+    .floating-status.bad { color: var(--bad); }
+
     .grid-4 {
       display: grid;
       grid-template-columns: 1.1fr .75fr .75fr .9fr;
@@ -1530,6 +1558,19 @@
     .cycle-diff-minus {
       color: var(--good);
       background: color-mix(in srgb, var(--good), transparent 86%);
+    }
+
+    .rest-badge {
+      display: inline-block;
+      margin-left: 4px;
+      border-radius: 999px;
+      padding: 1px 6px;
+      font-size: 11px;
+      font-weight: 850;
+      vertical-align: 1px;
+      color: #0a6f68;
+      background: rgba(105, 216, 190, .28);
+      border: 1px solid rgba(10, 111, 104, .32);
     }
 
     /* See detail button uses theme color */
@@ -2380,6 +2421,18 @@
       const box = el("status");
       box.textContent = message;
       box.className = `status ${type}`.trim();
+      let floating = el("floatingStatus");
+      if (!floating) {
+        floating = document.createElement("div");
+        floating.id = "floatingStatus";
+        document.body.appendChild(floating);
+      }
+      floating.textContent = message;
+      floating.className = `floating-status ${type} show`.trim();
+      clearTimeout(setStatus.hideTimer);
+      if (!/(中|…|\.\.\.)/.test(String(message))) {
+        setStatus.hideTimer = setTimeout(() => floating.classList.remove("show"), 4500);
+      }
     }
 
     const THEMES = ["splash","mist","ice","amber","bunny"];
@@ -3923,6 +3976,19 @@
       return map;
     }
 
+    function restSecondsForTrip(trips, index) {
+      if (index <= 0) return null;
+      const currentStart = entryTotal(trips[index]?.start);
+      const previousBack = entryTotal(trips[index - 1]?.back);
+      if (!Number.isFinite(currentStart) || !Number.isFinite(previousBack)) return null;
+      return currentStart - previousBack;
+    }
+
+    function restLabelForTrip(trips, index) {
+      const rest = restSecondsForTrip(trips, index);
+      return Number.isFinite(rest) ? `休${rest}秒` : "";
+    }
+
     function fmt(total) {
       if (total === null || total === undefined || total === "") return "";
       const sign = total < 0 ? "-" : "";
@@ -4008,6 +4074,7 @@
               const cycleDiffTitle = Number.isFinite(cycleDiff)
                 ? `出發週期差：本趟出發 - 上一趟出發，比含休${cycleDiff > 0 ? "多" : "少"}${Math.abs(cycleDiff)}秒`
                 : "";
+              const restLabel = restLabelForTrip(trips, i);
               const resultLabel = bad ? "回來早於出發" : fmt(result);
               const detailArgs = [
                 name,
@@ -4020,7 +4087,7 @@
               const rankClass = rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : "rank-4up";
               return `<td class="${bad ? "issue" : "result"}">${
                 resultLabel
-                  ? `<button class="result-btn" onclick='showTripDetail(${detailArgs})'>${resultLabel}${rank ? `<span class="rank-badge ${rankClass}">#${rank}</span>` : ""}${cycleDiffLabel ? `<span class="cycle-diff-badge ${cycleDiffClass}" title="${escapeHtml(cycleDiffTitle)}">${cycleDiffLabel}</span>` : ""}</button>`
+                  ? `<button class="result-btn" onclick='showTripDetail(${detailArgs})'>${resultLabel}${rank ? `<span class="rank-badge ${rankClass}">#${rank}</span>` : ""}${restLabel ? `<span class="rest-badge">${restLabel}</span>` : ""}${cycleDiffLabel ? `<span class="cycle-diff-badge ${cycleDiffClass}" title="${escapeHtml(cycleDiffTitle)}">${cycleDiffLabel}</span>` : ""}</button>`
                   : ""
               }</td>`;
             }).join("");
@@ -4448,6 +4515,7 @@
       const timeMatch = text.match(/^(\S+)/);
       const rankMatch = text.match(/#(\d+)/);
       const diffMatch = text.match(/([+-]\d+秒)/);
+      const restMatch = text.match(/休-?\d+秒/);
       const rank = rankMatch ? Number(rankMatch[1]) : 0;
       const rankClass = rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : rank ? "rank-4up" : "";
       const diffValue = diffMatch ? Number(diffMatch[1].replace("秒", "")) : null;
@@ -4455,6 +4523,7 @@
       return [
         timeMatch ? escapeHtml(timeMatch[1]) : escapeHtml(text),
         rank ? `<span class="rank-badge ${rankClass}">#${rank}</span>` : "",
+        restMatch ? `<span class="rest-badge">${escapeHtml(restMatch[0])}</span>` : "",
         diffMatch ? `<span class="cycle-diff-badge ${diffClass}">${escapeHtml(diffMatch[1])}</span>` : "",
       ].filter(Boolean).join("");
     }
@@ -4932,7 +5001,7 @@
         trips.forEach((trip, i) => row.push(
           trip.start?.time.label || "",
           trip.back ? `${trip.back.time.label}${trip.back.deductSeconds ? ` 扣${trip.back.deductSeconds}秒` : ""}` : "",
-          fmt(results[i]),
+          [fmt(results[i]), restLabelForTrip(trips, i)].filter(Boolean).join(" "),
           personalRanks.get(i) ? `#${personalRanks.get(i)}` : ""
         ));
         row.push(
@@ -4963,7 +5032,7 @@
         const valid = results.filter((value) => value !== null);
         const metrics = swimmerMetrics(trips);
         const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "";
-        return { name, results, valid, metrics, avg };
+        return { name, trips, results, valid, metrics, avg };
       });
     }
 
@@ -4980,9 +5049,9 @@
       for (let i = 1; i <= visibleTrips; i++) headers.push(`第${i}趟成績`);
       headers.push("完成", "PB", "PB趟次", "首末差", "平均");
       const rows = [headers];
-      swimmers.forEach(({ name, results, valid, metrics, avg }) => {
+      swimmers.forEach(({ name, trips, results, valid, metrics, avg }) => {
         const row = [name];
-        for (let i = 0; i < visibleTrips; i++) row.push(fmt(results[i]));
+        for (let i = 0; i < visibleTrips; i++) row.push([fmt(results[i]), restLabelForTrip(trips, i)].filter(Boolean).join(" "));
         row.push(
           valid.length,
           fmt(metrics.pb),
@@ -5044,7 +5113,8 @@
           const rank = personalRanks.get(index);
           const cycleDiff = intervalDiffs.get(index);
           const cycleDiffLabel = Number.isFinite(cycleDiff) ? `${cycleDiff > 0 ? "+" : ""}${cycleDiff}秒` : "";
-          row.push([fmt(result), rank ? `#${rank}` : "", cycleDiffLabel].filter(Boolean).join(" "));
+          const restLabel = restLabelForTrip(trips, index);
+          row.push([fmt(result), rank ? `#${rank}` : "", restLabel, cycleDiffLabel].filter(Boolean).join(" "));
         });
         row.push(
           valid.length,
