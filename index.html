@@ -1279,8 +1279,26 @@
 
     .snapshot-raw textarea {
       margin-top: 8px;
-      min-height: 96px;
+      min-height: 130px;
       font-size: 13px;
+    }
+
+    .snapshot-raw-actions {
+      display: inline-flex;
+      gap: 6px;
+      margin-left: auto;
+    }
+
+    .snapshot-raw-actions button {
+      width: auto;
+      min-height: 30px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+    }
+
+    .snapshot-parse-preview {
+      margin-top: 8px;
     }
 
     .snapshot-course-settings {
@@ -2160,7 +2178,7 @@
               </div>
               <div id="mixCountWrap" class="mix-count-wrap" hidden>
                 <label for="mixCount">課表組數</label>
-                <input id="mixCount" type="number" min="2" max="5" value="2">
+                <input id="mixCount" type="text" inputmode="numeric" pattern="[0-9]*" min="2" max="5" value="2">
               </div>
             </div>
             <div id="mixRows" class="mix-rows"></div>
@@ -4120,9 +4138,16 @@
           <details class="snapshot-card"${openIndex === index ? " open" : ""}>
             <summary><span>${escapeHtml(snapshotLabel(snapshot, index))}</span><span>${escapeHtml(snapshot.date || "")}</span></summary>
             <div class="snapshot-body">
-              <details class="snapshot-raw">
-                <summary class="save-label">原始語音輸入文字</summary>
-                <textarea readonly>${escapeHtml(snapshot.commandText || "")}</textarea>
+              <details class="snapshot-raw"${snapshot.rawOpen ? " open" : ""}>
+                <summary class="save-label">
+                  <span>原始語音輸入文字</span>
+                  <span class="snapshot-raw-actions">
+                    <button type="button" data-snapshot-parse="${index}">解析</button>
+                    <button type="button" data-snapshot-format="${index}">整理</button>
+                  </span>
+                </summary>
+                <textarea data-snapshot-command="${index}">${escapeHtml(snapshot.commandText || "")}</textarea>
+                ${renderSnapshotParsePreview(snapshot)}
               </details>
               ${settingsHtml}
               <div>
@@ -4138,6 +4163,23 @@
 
       list.querySelectorAll("[data-snapshot-setting]").forEach((input) => {
         input.addEventListener("change", () => updateSnapshotSetting(input));
+      });
+      list.querySelectorAll("[data-snapshot-command]").forEach((textarea) => {
+        textarea.addEventListener("change", () => updateSnapshotCommandText(textarea));
+      });
+      list.querySelectorAll("[data-snapshot-parse]").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          parseSnapshotCommand(Number(button.dataset.snapshotParse));
+        });
+      });
+      list.querySelectorAll("[data-snapshot-format]").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          formatSnapshotCommand(Number(button.dataset.snapshotFormat));
+        });
       });
       list.querySelectorAll("[data-snapshot-course-row]").forEach((input) => {
         input.addEventListener("change", () => updateSnapshotCourseRow(input));
@@ -4179,6 +4221,98 @@
       list.querySelectorAll("[data-delete-snapshot]").forEach((button) => {
         button.addEventListener("click", () => deleteSnapshot(Number(button.dataset.deleteSnapshot)));
       });
+    }
+
+    function renderSnapshotParsePreview(snapshot) {
+      const preview = snapshot.parsePreview;
+      if (!preview || (!preview.items?.length && !preview.issues?.length)) return "";
+      const rows = (preview.items || []).map((item) => `
+        <div>${escapeHtml(item.rawName)}</div>
+        <div>${escapeHtml(item.timeRaw)}</div>
+        <div>${escapeHtml(item.action)}</div>
+        <div>${escapeHtml(item.name)}</div>
+        <div class="parse-method">${escapeHtml(item.method)}${["模糊", "注音模糊"].includes(item.method) ? ` ${item.score}%` : ""}</div>
+      `).join("");
+      const issues = (preview.issues || []).map((item) => `
+        <div>${escapeHtml(item.raw)}</div><div>-</div><div>-</div><div>-</div><div class="parse-method">${escapeHtml(item.issue)}</div>
+      `).join("");
+      return `
+        <div class="snapshot-parse-preview parse-preview-table">
+          <div class="th">原始姓名</div>
+          <div class="th">時間</div>
+          <div class="th">動作</div>
+          <div class="th">判定姓名</div>
+          <div class="th">方式</div>
+          ${rows}${issues}
+        </div>`;
+    }
+
+    function entriesFromParsePreview(preview) {
+      const entries = [];
+      const issues = (preview?.issues || []).slice();
+      for (const item of preview?.items || []) {
+        if (!item.timeRaw || item.timeRaw === "-" || !item.action || item.action === "-") continue;
+        const parsedTime = parseTime(item.timeRaw);
+        if (!parsedTime) {
+          issues.push({ raw: item.raw, issue: `時間無法判讀：${item.timeRaw}` });
+          continue;
+        }
+        entries.push({
+          id: `${Date.now()}-${Math.random()}`,
+          name: item.name,
+          action: item.action,
+          time: parsedTime,
+          deductSeconds: parseDeduct(item.timeRaw),
+          raw: item.raw || `${item.name}${parsedTime.label}${item.action}`,
+        });
+      }
+      return { entries, issues };
+    }
+
+    function snapshotCommandTextarea(index) {
+      return document.querySelector(`[data-snapshot-command="${index}"]`);
+    }
+
+    function updateSnapshotCommandText(textarea) {
+      const snapshot = snapshots[Number(textarea.dataset.snapshotCommand)];
+      if (!snapshot) return;
+      snapshot.commandText = textarea.value;
+      if (snapshot.parsePreviewSource !== textarea.value) {
+        delete snapshot.parsePreview;
+        delete snapshot.parsePreviewSource;
+      }
+      saveSnapshotsLocal();
+    }
+
+    function parseSnapshotCommand(index) {
+      const snapshot = snapshots[index];
+      const textarea = snapshotCommandTextarea(index);
+      if (!snapshot || !textarea) return;
+      snapshot.commandText = textarea.value;
+      snapshot.parsePreview = parseCommandPreview(snapshot.commandText);
+      snapshot.parsePreviewSource = snapshot.commandText;
+      snapshot.rawOpen = true;
+      saveSnapshotsLocal();
+      renderSnapshotList(index);
+      setStatus(`暫存第 ${index + 1} 組解析完成：${snapshot.parsePreview.items.length} 筆。`, snapshot.parsePreview.issues.length ? "bad" : "good");
+    }
+
+    function formatSnapshotCommand(index) {
+      const snapshot = snapshots[index];
+      const textarea = snapshotCommandTextarea(index);
+      if (!snapshot || !textarea) return;
+      snapshot.commandText = textarea.value;
+      const preview = snapshot.parsePreviewSource === snapshot.commandText && snapshot.parsePreview
+        ? snapshot.parsePreview
+        : parseCommandPreview(snapshot.commandText);
+      const result = entriesFromParsePreview(preview);
+      snapshot.entries = result.entries;
+      snapshot.issues = result.issues;
+      snapshot.parsePreview = preview;
+      snapshot.parsePreviewSource = snapshot.commandText;
+      snapshot.rawOpen = true;
+      refreshSnapshotSummary(snapshot, index);
+      setStatus(`暫存第 ${index + 1} 組已重新整理：${result.entries.length} 筆${result.issues.length ? `，${result.issues.length} 筆提醒` : ""}。`, result.issues.length ? "bad" : "good");
     }
 
     function renderSnapshotCourseSettings(snapshot, index) {
@@ -4246,7 +4380,7 @@
             </div>
             <div${settings.mixed ? "" : " hidden"}>
               <label>課表組數</label>
-              <input data-snapshot-index="${index}" data-snapshot-setting="mixCount" type="number" min="2" max="${COURSE_GROUPS.length}" value="${settings.mixCount}">
+              <input data-snapshot-index="${index}" data-snapshot-setting="mixCount" type="text" inputmode="numeric" pattern="[0-9]*" min="2" max="${COURSE_GROUPS.length}" value="${settings.mixCount}">
             </div>
             <div>
               <label>日期</label>
@@ -4616,7 +4750,11 @@
       });
     }
 
-    ["mixedNo", "mixedYes", "mixCount"].forEach((id) => el(id).addEventListener("input", () => {
+    ["mixedNo", "mixedYes"].forEach((id) => el(id).addEventListener("input", () => {
+      renderMixRows();
+      if (state.entries.length) render();
+    }));
+    ["change", "blur"].forEach((eventName) => el("mixCount")?.addEventListener(eventName, () => {
       renderMixRows();
       if (state.entries.length) render();
     }));
