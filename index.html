@@ -876,57 +876,43 @@
       font-weight: 850;
     }
 
-    .intensity-editor {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+    .intensity-correct-btn {
+      min-height: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      text-decoration: underline;
+      text-decoration-thickness: 2px;
+      text-underline-offset: 4px;
+      cursor: pointer;
+    }
+
+    .intensity-dialog-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 14px 0;
+    }
+
+    .intensity-dialog-controls label {
+      display: flex;
+      flex-direction: column;
       gap: 5px;
-      white-space: nowrap;
-    }
-
-    .lap-item-select {
-      width: auto;
-      min-width: 72px;
-      padding: 3px 5px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 800;
-      color: var(--accent);
-      background: var(--panel);
-    }
-
-    .lap-item-trigger {
-      min-height: 0;
-      padding: 3px 7px;
-      border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
-      border-radius: 999px;
-      color: var(--accent);
-      background: var(--panel);
-      font-size: 11px;
-      font-weight: 800;
-      line-height: 1.4;
-    }
-
-    .lap-item-custom {
-      width: 68px;
-      padding: 3px 5px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 800;
-    }
-
-    .lap-item-apply {
-      min-height: 0;
-      padding: 3px 6px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 800;
-    }
-
-    .no-pb-note {
       color: var(--muted);
-      font-size: 11px;
+      font-size: 13px;
       font-weight: 700;
+    }
+
+    .intensity-dialog-actions {
+      display: flex;
+      gap: 9px;
+      margin-top: 12px;
+    }
+
+    .intensity-dialog-actions button {
+      flex: 1;
     }
 
     .dialog-backdrop {
@@ -2449,7 +2435,6 @@
     const maxTrips = 6;
     const COURSE_GROUPS = ["A", "B", "C", "D", "E"];
     const state = { entries: [], issues: [], summaryMetaOverrides: {}, lapItemOverrides: {} };
-    const openLapItemEditors = new Set();
     const parseState = { source: "", items: [], issues: [] };
     const pbState = { headers: [], rows: [], byNameItem: new Map(), studentCount: 0, loadedAt: "" };
     let snapshots = [];
@@ -3019,15 +3004,6 @@
       return String(overrides?.[lapItemKey(name, tripIndex)] || "").trim() || String(plannedItem || "").trim();
     }
 
-    function availableLapItems(name, plannedItem, selectedItem) {
-      const names = new Set([selectedItem, "50自", "75自", "100自", "200自", "200混"].filter(Boolean));
-      pbState.byNameItem.forEach((pb) => {
-        if (pb.name === name) names.add(pb.item);
-      });
-      names.delete(String(plannedItem || "").trim());
-      return Array.from(names);
-    }
-
     function lapIntensityInfo(name, plannedItem, result, tripIndex, overrides = state.lapItemOverrides) {
       const key = lapItemKey(name, tripIndex);
       const selectedItem = String(overrides?.[key] || "").trim();
@@ -3047,27 +3023,12 @@
       };
     }
 
-    function renderLapItemSelect(name, plannedItem, tripIndex, overrides, attributes = "") {
-      const key = lapItemKey(name, tripIndex);
-      const selected = String(overrides?.[key] || "").trim();
-      const options = availableLapItems(name, plannedItem, selected).map((item) =>
-        `<option value="${escapeHtml(item)}"${selected === item ? " selected" : ""}>${escapeHtml(item)}</option>`
-      ).join("");
-      return `<select class="lap-item-select" ${attributes} data-lap-name="${escapeHtml(name)}" data-lap-index="${tripIndex}">
-        <option value="">依課表：${escapeHtml(plannedItem || "未設定")}</option>${options}
-      </select>`;
-    }
-
-    function renderLapItemEditor(name, plannedItem, result, tripIndex, overrides, scope, attributes = "") {
-      const info = lapIntensityInfo(name, plannedItem, result, tripIndex, overrides);
-      const editorKey = `${scope}|||${info.key}`;
-      if (!info.showCorrection) return "";
-      if (!openLapItemEditors.has(editorKey)) {
-        return `<button type="button" class="lap-item-trigger" data-open-lap-item-editor="${escapeHtml(editorKey)}">${escapeHtml(info.selectedItem || "修正")}</button>`;
-      }
-      return `${renderLapItemSelect(name, plannedItem, tripIndex, overrides, attributes)}
-        <input class="lap-item-custom" type="text" placeholder="自訂" value="${escapeHtml(info.selectedItem)}" data-custom-lap-item="${escapeHtml(editorKey)}">
-        <button type="button" class="lap-item-apply" data-apply-lap-item="${escapeHtml(editorKey)}">套用</button>`;
+    function intensityCorrectionHtml(info, name, plannedItem, tripIndex, scope, snapshotIndex = "") {
+      const value = info.label || (info.selectedItem ? "尚無PB" : "");
+      if (!value) return "";
+      if (!info.showCorrection) return escapeHtml(value);
+      const args = [scope, snapshotIndex, name, plannedItem, tripIndex + 1].map((entry) => JSON.stringify(entry)).join(",");
+      return `<button type="button" class="intensity-correct-btn" onclick='showIntensityCorrectionDialog(${args})'>${escapeHtml(value)}</button>`;
     }
 
     function setLapItemOverride(overrides, key, value) {
@@ -4224,9 +4185,8 @@
             const intensityCells = Array.from({ length: maxTrips }, (_, i) => {
               const result = results[i];
               const info = lapIntensityInfo(name, meta.item, result, i);
-              const selector = renderLapItemEditor(name, meta.item, result, i, state.lapItemOverrides, "main", `data-main-lap-item="${escapeHtml(info.key)}"`);
-              const value = info.label || (info.selectedItem ? `<span class="no-pb-note">尚無PB</span>` : "");
-              return `<td class="intensity-value ${intensityClass(info.percent)}"><span class="intensity-editor">${selector}${value}</span></td>`;
+              const value = intensityCorrectionHtml(info, name, meta.item, i, "main");
+              return `<td class="intensity-value ${intensityClass(info.percent)}">${value}</td>`;
             }).join("");
             const pbIntensityLabel = intensityLabel(itemPb?.seconds, metrics.pb);
             const pbIntensityPercent = pbIntensityLabel ? Number(pbIntensityLabel.replace("%", "")) : NaN;
@@ -4276,32 +4236,6 @@
           render();
         });
       });
-      el("summaryTable").querySelectorAll("[data-main-lap-item]").forEach((select) => {
-        select.addEventListener("change", () => {
-          const key = select.dataset.mainLapItem;
-          setLapItemOverride(state.lapItemOverrides, key, select.value);
-          openLapItemEditors.delete(`main|||${key}`);
-          render();
-        });
-      });
-      el("summaryTable").querySelectorAll("[data-open-lap-item-editor]").forEach((button) => {
-        button.addEventListener("click", () => {
-          openLapItemEditors.add(button.dataset.openLapItemEditor);
-          render();
-        });
-      });
-      el("summaryTable").querySelectorAll("[data-apply-lap-item]").forEach((button) => {
-        button.addEventListener("click", () => {
-          const editorKey = button.dataset.applyLapItem;
-          const key = editorKey.replace(/^main\|\|\|/, "");
-          const input = Array.from(el("summaryTable").querySelectorAll("[data-custom-lap-item]")).find((field) => field.dataset.customLapItem === editorKey);
-          if (!input?.value.trim()) return;
-          setLapItemOverride(state.lapItemOverrides, key, input.value);
-          openLapItemEditors.delete(editorKey);
-          render();
-        });
-      });
-
       const rawRows = state.entries.map((entry, index) => `
         <tr>
           <td>${index + 1}</td>
@@ -4421,43 +4355,6 @@
           snapshot.summaryMetaOverrides[name] ||= {};
           snapshot.summaryMetaOverrides[name].courseGroup = Number(select.value) || 1;
           refreshSnapshotSummary(snapshot, Number(select.dataset.snapshotIndex));
-        });
-      });
-      list.querySelectorAll("[data-snapshot-lap-item]").forEach((select) => {
-        select.addEventListener("change", () => {
-          const snapshot = snapshots[Number(select.dataset.snapshotIndex)];
-          if (!snapshot) return;
-          snapshot.lapItemOverrides ||= {};
-          const key = select.dataset.snapshotLapItem;
-          setLapItemOverride(snapshot.lapItemOverrides, key, select.value);
-          openLapItemEditors.delete(`snapshot-${select.dataset.snapshotIndex}|||${key}`);
-          refreshSnapshotSummary(snapshot, Number(select.dataset.snapshotIndex));
-        });
-      });
-      list.querySelectorAll("[data-open-lap-item-editor]").forEach((button) => {
-        button.addEventListener("click", () => {
-          const editorKey = button.dataset.openLapItemEditor;
-          const match = editorKey.match(/^snapshot-(\d+)\|\|\|/);
-          if (!match) return;
-          openLapItemEditors.add(editorKey);
-          renderSnapshotList(Number(match[1]));
-        });
-      });
-      list.querySelectorAll("[data-apply-lap-item]").forEach((button) => {
-        button.addEventListener("click", () => {
-          const editorKey = button.dataset.applyLapItem;
-          const match = editorKey.match(/^snapshot-(\d+)\|\|\|/);
-          if (!match) return;
-          const snapshotIndex = Number(match[1]);
-          const snapshot = snapshots[snapshotIndex];
-          if (!snapshot) return;
-          snapshot.lapItemOverrides ||= {};
-          const key = editorKey.replace(new RegExp(`^snapshot-${snapshotIndex}\\|\\|\\|`), "");
-          const input = Array.from(list.querySelectorAll("[data-custom-lap-item]")).find((field) => field.dataset.customLapItem === editorKey);
-          if (!input?.value.trim()) return;
-          setLapItemOverride(snapshot.lapItemOverrides, key, input.value);
-          openLapItemEditors.delete(editorKey);
-          refreshSnapshotSummary(snapshot, snapshotIndex);
         });
       });
       list.querySelectorAll("[data-delete-snapshot]").forEach((button) => {
@@ -4679,9 +4576,8 @@
                 const seconds = parsePbSeconds(String(row[columnIndex] || "").trim().split(/\s+/)[0] || "");
                 const tripIndex = tripColumns.findIndex((tripColumn) => tripColumn.columnIndex === columnIndex);
                 const info = lapIntensityInfo(name, row[3], seconds, tripIndex, snapshot.lapItemOverrides || {});
-                const selector = renderLapItemEditor(name, row[3], seconds, tripIndex, snapshot.lapItemOverrides || {}, `snapshot-${index}`, `data-snapshot-index="${index}" data-snapshot-lap-item="${escapeHtml(info.key)}"`);
-                const value = info.label || (info.selectedItem ? `<span class="no-pb-note">尚無PB</span>` : "");
-                return `<td class="intensity-value ${intensityClass(info.percent)}"><span class="intensity-editor">${selector}${value}</span></td>`;
+                const value = intensityCorrectionHtml(info, name, row[3], tripIndex, "snapshot", index);
+                return `<td class="intensity-value ${intensityClass(info.percent)}">${value}</td>`;
               }).join("");
               const pbIndex = headers.indexOf("PB");
               const avgIndex = headers.indexOf("平均");
@@ -4829,6 +4725,76 @@
         <div class="dialog-row"><span>本趟排名</span><strong>${escapeHtml(rankLabel || "-")}</strong></div>
       `;
       el("detailDialog").classList.add("show");
+    }
+
+    function itemParts(item) {
+      const match = String(item || "").trim().match(/^(\d+)(.*)$/);
+      return {
+        distance: match?.[1] || "",
+        stroke: match?.[2] || "自",
+      };
+    }
+
+    function showIntensityCorrectionDialog(scope, snapshotIndex, name, plannedItem, tripNumber) {
+      const tripIndex = Number(tripNumber) - 1;
+      const snapshot = scope === "snapshot" ? snapshots[Number(snapshotIndex)] : null;
+      if (scope === "snapshot" && !snapshot) return;
+      if (snapshot) snapshot.lapItemOverrides ||= {};
+      const overrides = scope === "snapshot" ? snapshot.lapItemOverrides : state.lapItemOverrides;
+      const key = lapItemKey(name, tripIndex);
+      const currentItem = String(overrides[key] || "").trim() || plannedItem;
+      const current = itemParts(currentItem);
+      const planned = itemParts(plannedItem);
+      const distances = new Set(["25", "50", "75", "100", "200", current.distance, planned.distance].filter(Boolean));
+      pbState.byNameItem.forEach((pb) => {
+        if (pb.name !== name) return;
+        const part = itemParts(pb.item);
+        if (part.distance) distances.add(part.distance);
+      });
+      const strokes = ["自", "仰", "蛙", "蝶", "混"];
+      if (current.stroke && !strokes.includes(current.stroke)) strokes.push(current.stroke);
+      const strokeOptions = strokes.map((stroke) =>
+        `<option value="${escapeHtml(stroke)}"${stroke === current.stroke ? " selected" : ""}>${escapeHtml(stroke)}</option>`
+      ).join("");
+      const distanceOptions = Array.from(distances).map((distance) => `<option value="${escapeHtml(distance)}"></option>`).join("");
+
+      el("detailTitle").textContent = `${name} 第${tripNumber}趟 強度修正`;
+      el("detailContent").innerHTML = `
+        <div class="dialog-row"><span>課表項目</span><strong>${escapeHtml(plannedItem || "未設定")}</strong></div>
+        <div class="dialog-row"><span>目前計算項目</span><strong>${escapeHtml(currentItem || "未設定")}</strong></div>
+        <div class="intensity-dialog-controls">
+          <label>實際距離
+            <input id="actualLapDistance" type="text" inputmode="numeric" list="actualLapDistances" value="${escapeHtml(current.distance)}" placeholder="例：50">
+            <datalist id="actualLapDistances">${distanceOptions}</datalist>
+          </label>
+          <label>實際泳姿
+            <select id="actualLapStroke">${strokeOptions}</select>
+          </label>
+        </div>
+        <p class="small">套用後會改用該項目的 PB 重算這一趟強度；沒有 PB 時會顯示「尚無PB」。</p>
+        <div class="intensity-dialog-actions">
+          <button id="restoreLapItemBtn" type="button" class="secondary">依課表恢復</button>
+          <button id="confirmLapItemBtn" type="button">套用修正</button>
+        </div>
+      `;
+      el("detailDialog").classList.add("show");
+
+      const finish = (value) => {
+        setLapItemOverride(overrides, key, value === plannedItem ? "" : value);
+        el("detailDialog").classList.remove("show");
+        if (scope === "snapshot") refreshSnapshotSummary(snapshot, Number(snapshotIndex));
+        else render();
+      };
+      el("restoreLapItemBtn").addEventListener("click", () => finish(""));
+      el("confirmLapItemBtn").addEventListener("click", () => {
+        const distance = String(el("actualLapDistance")?.value || "").replace(/[^\d]/g, "");
+        const stroke = String(el("actualLapStroke")?.value || "").trim();
+        if (!distance || !stroke) {
+          setStatus("請先選擇實際距離與泳姿。", "bad");
+          return;
+        }
+        finish(`${distance}${stroke}`);
+      });
     }
 
     function setupSpeech() {
