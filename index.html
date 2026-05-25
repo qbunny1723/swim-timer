@@ -895,6 +895,34 @@
       background: var(--panel);
     }
 
+    .lap-item-trigger {
+      min-height: 0;
+      padding: 3px 7px;
+      border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+      border-radius: 999px;
+      color: var(--accent);
+      background: var(--panel);
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.4;
+    }
+
+    .lap-item-custom {
+      width: 68px;
+      padding: 3px 5px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .lap-item-apply {
+      min-height: 0;
+      padding: 3px 6px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
     .no-pb-note {
       color: var(--muted);
       font-size: 11px;
@@ -2421,6 +2449,7 @@
     const maxTrips = 6;
     const COURSE_GROUPS = ["A", "B", "C", "D", "E"];
     const state = { entries: [], issues: [], summaryMetaOverrides: {}, lapItemOverrides: {} };
+    const openLapItemEditors = new Set();
     const parseState = { source: "", items: [], issues: [] };
     const pbState = { headers: [], rows: [], byNameItem: new Map(), studentCount: 0, loadedAt: "" };
     let snapshots = [];
@@ -3022,11 +3051,29 @@
       const key = lapItemKey(name, tripIndex);
       const selected = String(overrides?.[key] || "").trim();
       const options = availableLapItems(name, plannedItem, selected).map((item) =>
-        `<option value="${escapeHtml(item)}"${selected === item ? " selected" : ""}>${escapeHtml(item)}強度</option>`
+        `<option value="${escapeHtml(item)}"${selected === item ? " selected" : ""}>${escapeHtml(item)}</option>`
       ).join("");
       return `<select class="lap-item-select" ${attributes} data-lap-name="${escapeHtml(name)}" data-lap-index="${tripIndex}">
         <option value="">依課表：${escapeHtml(plannedItem || "未設定")}</option>${options}
       </select>`;
+    }
+
+    function renderLapItemEditor(name, plannedItem, result, tripIndex, overrides, scope, attributes = "") {
+      const info = lapIntensityInfo(name, plannedItem, result, tripIndex, overrides);
+      const editorKey = `${scope}|||${info.key}`;
+      if (!info.showCorrection) return "";
+      if (!openLapItemEditors.has(editorKey)) {
+        return `<button type="button" class="lap-item-trigger" data-open-lap-item-editor="${escapeHtml(editorKey)}">${escapeHtml(info.selectedItem || "修正")}</button>`;
+      }
+      return `${renderLapItemSelect(name, plannedItem, tripIndex, overrides, attributes)}
+        <input class="lap-item-custom" type="text" placeholder="自訂" value="${escapeHtml(info.selectedItem)}" data-custom-lap-item="${escapeHtml(editorKey)}">
+        <button type="button" class="lap-item-apply" data-apply-lap-item="${escapeHtml(editorKey)}">套用</button>`;
+    }
+
+    function setLapItemOverride(overrides, key, value) {
+      const item = String(value || "").trim();
+      if (item) overrides[key] = item;
+      else delete overrides[key];
     }
 
     function redrawPbDependentViews() {
@@ -4177,9 +4224,7 @@
             const intensityCells = Array.from({ length: maxTrips }, (_, i) => {
               const result = results[i];
               const info = lapIntensityInfo(name, meta.item, result, i);
-              const selector = info.showCorrection
-                ? renderLapItemSelect(name, meta.item, i, state.lapItemOverrides, `data-main-lap-item="${escapeHtml(info.key)}"`)
-                : "";
+              const selector = renderLapItemEditor(name, meta.item, result, i, state.lapItemOverrides, "main", `data-main-lap-item="${escapeHtml(info.key)}"`);
               const value = info.label || (info.selectedItem ? `<span class="no-pb-note">尚無PB</span>` : "");
               return `<td class="intensity-value ${intensityClass(info.percent)}"><span class="intensity-editor">${selector}${value}</span></td>`;
             }).join("");
@@ -4234,8 +4279,25 @@
       el("summaryTable").querySelectorAll("[data-main-lap-item]").forEach((select) => {
         select.addEventListener("change", () => {
           const key = select.dataset.mainLapItem;
-          if (select.value) state.lapItemOverrides[key] = select.value;
-          else delete state.lapItemOverrides[key];
+          setLapItemOverride(state.lapItemOverrides, key, select.value);
+          openLapItemEditors.delete(`main|||${key}`);
+          render();
+        });
+      });
+      el("summaryTable").querySelectorAll("[data-open-lap-item-editor]").forEach((button) => {
+        button.addEventListener("click", () => {
+          openLapItemEditors.add(button.dataset.openLapItemEditor);
+          render();
+        });
+      });
+      el("summaryTable").querySelectorAll("[data-apply-lap-item]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const editorKey = button.dataset.applyLapItem;
+          const key = editorKey.replace(/^main\|\|\|/, "");
+          const input = Array.from(el("summaryTable").querySelectorAll("[data-custom-lap-item]")).find((field) => field.dataset.customLapItem === editorKey);
+          if (!input?.value.trim()) return;
+          setLapItemOverride(state.lapItemOverrides, key, input.value);
+          openLapItemEditors.delete(editorKey);
           render();
         });
       });
@@ -4367,9 +4429,35 @@
           if (!snapshot) return;
           snapshot.lapItemOverrides ||= {};
           const key = select.dataset.snapshotLapItem;
-          if (select.value) snapshot.lapItemOverrides[key] = select.value;
-          else delete snapshot.lapItemOverrides[key];
+          setLapItemOverride(snapshot.lapItemOverrides, key, select.value);
+          openLapItemEditors.delete(`snapshot-${select.dataset.snapshotIndex}|||${key}`);
           refreshSnapshotSummary(snapshot, Number(select.dataset.snapshotIndex));
+        });
+      });
+      list.querySelectorAll("[data-open-lap-item-editor]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const editorKey = button.dataset.openLapItemEditor;
+          const match = editorKey.match(/^snapshot-(\d+)\|\|\|/);
+          if (!match) return;
+          openLapItemEditors.add(editorKey);
+          renderSnapshotList(Number(match[1]));
+        });
+      });
+      list.querySelectorAll("[data-apply-lap-item]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const editorKey = button.dataset.applyLapItem;
+          const match = editorKey.match(/^snapshot-(\d+)\|\|\|/);
+          if (!match) return;
+          const snapshotIndex = Number(match[1]);
+          const snapshot = snapshots[snapshotIndex];
+          if (!snapshot) return;
+          snapshot.lapItemOverrides ||= {};
+          const key = editorKey.replace(new RegExp(`^snapshot-${snapshotIndex}\\|\\|\\|`), "");
+          const input = Array.from(list.querySelectorAll("[data-custom-lap-item]")).find((field) => field.dataset.customLapItem === editorKey);
+          if (!input?.value.trim()) return;
+          setLapItemOverride(snapshot.lapItemOverrides, key, input.value);
+          openLapItemEditors.delete(editorKey);
+          refreshSnapshotSummary(snapshot, snapshotIndex);
         });
       });
       list.querySelectorAll("[data-delete-snapshot]").forEach((button) => {
@@ -4591,9 +4679,7 @@
                 const seconds = parsePbSeconds(String(row[columnIndex] || "").trim().split(/\s+/)[0] || "");
                 const tripIndex = tripColumns.findIndex((tripColumn) => tripColumn.columnIndex === columnIndex);
                 const info = lapIntensityInfo(name, row[3], seconds, tripIndex, snapshot.lapItemOverrides || {});
-                const selector = info.showCorrection
-                  ? renderLapItemSelect(name, row[3], tripIndex, snapshot.lapItemOverrides || {}, `data-snapshot-index="${index}" data-snapshot-lap-item="${escapeHtml(info.key)}"`)
-                  : "";
+                const selector = renderLapItemEditor(name, row[3], seconds, tripIndex, snapshot.lapItemOverrides || {}, `snapshot-${index}`, `data-snapshot-index="${index}" data-snapshot-lap-item="${escapeHtml(info.key)}"`);
                 const value = info.label || (info.selectedItem ? `<span class="no-pb-note">尚無PB</span>` : "");
                 return `<td class="intensity-value ${intensityClass(info.percent)}"><span class="intensity-editor">${selector}${value}</span></td>`;
               }).join("");
