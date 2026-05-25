@@ -5407,14 +5407,12 @@
           const avg = Math.round(valid.reduce((sum, value) => sum + value, 0) / valid.length);
           const itemPb = getPb(name, meta.item);
           const scoreCells = results.slice(0, lastTrip).map((result, index) => {
-            if (result === null) return "";
-            if (result < 0) return "回來早於出發";
+            if (result === null) return ["", "", "", ""];
+            if (result < 0) return ["回來早於出發", "", "", ""];
             const rank = personalRanks.get(index);
             const cycleDiff = intervalDiffs.get(index);
             const cycleLabel = Number.isFinite(cycleDiff) ? `${cycleDiff > 0 ? "+" : ""}${cycleDiff}秒` : "";
-            return [fmt(result), rank ? `#${rank}` : "", restLabelForTrip(trips, index), cycleLabel]
-              .filter(Boolean)
-              .join(" ");
+            return [fmt(result), rank ? `#${rank}` : "", restLabelForTrip(trips, index), cycleLabel];
           });
           const intensityCells = results.slice(0, lastTrip).map((result) => intensityLabel(itemPb?.seconds, result));
           sections.get(key).records.push({
@@ -5457,17 +5455,26 @@
           });
           const rows = [
             [section.date, section.session],
-            [...baseHeaders, ...Array.from({ length: maxTrips }, (_, index) => `第${index + 1}趟成績`), ...metricHeaders],
+            [
+              ...baseHeaders,
+              ...Array.from({ length: maxTrips }, (_, index) => [`第${index + 1}趟成績`, "", "", ""]).flat(),
+              ...metricHeaders,
+            ],
+            [
+              ...baseHeaders.map(() => ""),
+              ...Array.from({ length: maxTrips }, () => ["時間", "名次", "休息", "含休差"]).flat(),
+              ...metricHeaders.map(() => ""),
+            ],
           ];
           records.forEach((record) => {
-            const scores = Array.from({ length: maxTrips }, (_, index) => record.scoreCells[index] || "");
-            const strengths = Array.from({ length: maxTrips }, (_, index) => record.intensityCells[index] || "");
+            const scores = Array.from({ length: maxTrips }, (_, index) => record.scoreCells[index] || ["", "", "", ""]).flat();
+            const strengths = Array.from({ length: maxTrips }, (_, index) => [record.intensityCells[index] || "", "", "", ""]).flat();
             rows.push([
               record.session, record.personOrder, record.groupLabel, record.item, record.timeRaw, record.name, record.itemPb,
               ...scores, record.completed, record.pb, record.pbTrip, record.difference, record.average,
             ]);
             rows.push([
-              "", "", record.groupLabel, "", "", "強度", "",
+              "", "", "", "", "", "強度", "",
               ...strengths, "", record.pbIntensity, "", "", record.averageIntensity,
             ]);
           });
