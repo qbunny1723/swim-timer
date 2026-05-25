@@ -876,6 +876,31 @@
       font-weight: 850;
     }
 
+    .intensity-editor {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .lap-item-select {
+      width: auto;
+      min-width: 72px;
+      padding: 3px 5px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--accent);
+      background: var(--panel);
+    }
+
+    .no-pb-note {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
     .dialog-backdrop {
       position: fixed;
       inset: 0;
@@ -2395,7 +2420,7 @@
     const PB_DATA_KEY = "swimTimerPbData";
     const maxTrips = 6;
     const COURSE_GROUPS = ["A", "B", "C", "D", "E"];
-    const state = { entries: [], issues: [], summaryMetaOverrides: {} };
+    const state = { entries: [], issues: [], summaryMetaOverrides: {}, lapItemOverrides: {} };
     const parseState = { source: "", items: [], issues: [] };
     const pbState = { headers: [], rows: [], byNameItem: new Map(), studentCount: 0, loadedAt: "" };
     let snapshots = [];
@@ -2630,6 +2655,7 @@
         sessionGroup: courseSettings.sessionGroup,
         courseSettings,
         summaryMetaOverrides: snapshot?.summaryMetaOverrides || {},
+        lapItemOverrides: snapshot?.lapItemOverrides || {},
         summaryTableRows: Array.isArray(snapshot?.summaryTableRows)
           ? snapshot.summaryTableRows.map((row) => Array.isArray(row) ? row.slice() : [row])
           : [],
@@ -2954,6 +2980,53 @@
     function intensityLabel(pbSeconds, resultSeconds) {
       if (!Number.isFinite(pbSeconds) || !Number.isFinite(resultSeconds) || resultSeconds <= 0) return "";
       return `${Math.round((pbSeconds / resultSeconds) * 100)}%`;
+    }
+
+    function lapItemKey(name, tripIndex) {
+      return `${String(name || "").trim()}|||${tripIndex + 1}`;
+    }
+
+    function actualLapItem(name, plannedItem, tripIndex, overrides = state.lapItemOverrides) {
+      return String(overrides?.[lapItemKey(name, tripIndex)] || "").trim() || String(plannedItem || "").trim();
+    }
+
+    function availableLapItems(name, plannedItem, selectedItem) {
+      const names = new Set([selectedItem, "50自", "75自", "100自", "200自", "200混"].filter(Boolean));
+      pbState.byNameItem.forEach((pb) => {
+        if (pb.name === name) names.add(pb.item);
+      });
+      names.delete(String(plannedItem || "").trim());
+      return Array.from(names);
+    }
+
+    function lapIntensityInfo(name, plannedItem, result, tripIndex, overrides = state.lapItemOverrides) {
+      const key = lapItemKey(name, tripIndex);
+      const selectedItem = String(overrides?.[key] || "").trim();
+      const actualItem = selectedItem || plannedItem;
+      const actualPb = getPb(name, actualItem);
+      const label = intensityLabel(actualPb?.seconds, result);
+      const originalLabel = intensityLabel(getPb(name, plannedItem)?.seconds, result);
+      const originalPercent = originalLabel ? Number(originalLabel.replace("%", "")) : NaN;
+      return {
+        key,
+        selectedItem,
+        actualItem,
+        actualPb,
+        label,
+        percent: label ? Number(label.replace("%", "")) : NaN,
+        showCorrection: !!selectedItem || originalPercent > 100,
+      };
+    }
+
+    function renderLapItemSelect(name, plannedItem, tripIndex, overrides, attributes = "") {
+      const key = lapItemKey(name, tripIndex);
+      const selected = String(overrides?.[key] || "").trim();
+      const options = availableLapItems(name, plannedItem, selected).map((item) =>
+        `<option value="${escapeHtml(item)}"${selected === item ? " selected" : ""}>${escapeHtml(item)}強度</option>`
+      ).join("");
+      return `<select class="lap-item-select" ${attributes} data-lap-name="${escapeHtml(name)}" data-lap-index="${tripIndex}">
+        <option value="">依課表：${escapeHtml(plannedItem || "未設定")}</option>${options}
+      </select>`;
     }
 
     function redrawPbDependentViews() {
@@ -3721,6 +3794,7 @@
       state.entries = [];
       state.issues = parseState.issues.slice();
       state.summaryMetaOverrides = {};
+      state.lapItemOverrides = {};
       for (const item of parseState.items) {
         if (!item.timeRaw || item.timeRaw === "-" || !item.action || item.action === "-") continue;
         const parsedTime = parseTime(item.timeRaw);
@@ -3746,6 +3820,7 @@
       state.entries = [];
       state.issues = [];
       state.summaryMetaOverrides = {};
+      state.lapItemOverrides = {};
       const commands = splitCommands(el("commandBox").value);
       for (const command of commands) {
         if (command.error) {
@@ -4101,9 +4176,12 @@
             }).join("");
             const intensityCells = Array.from({ length: maxTrips }, (_, i) => {
               const result = results[i];
-              const label = intensityLabel(itemPb?.seconds, result);
-              const percent = label ? Number(label.replace("%", "")) : NaN;
-              return `<td class="intensity-value ${intensityClass(percent)}">${label}</td>`;
+              const info = lapIntensityInfo(name, meta.item, result, i);
+              const selector = info.showCorrection
+                ? renderLapItemSelect(name, meta.item, i, state.lapItemOverrides, `data-main-lap-item="${escapeHtml(info.key)}"`)
+                : "";
+              const value = info.label || (info.selectedItem ? `<span class="no-pb-note">尚無PB</span>` : "");
+              return `<td class="intensity-value ${intensityClass(info.percent)}"><span class="intensity-editor">${selector}${value}</span></td>`;
             }).join("");
             const pbIntensityLabel = intensityLabel(itemPb?.seconds, metrics.pb);
             const pbIntensityPercent = pbIntensityLabel ? Number(pbIntensityLabel.replace("%", "")) : NaN;
@@ -4150,6 +4228,14 @@
           const name = select.dataset.courseGroup;
           state.summaryMetaOverrides[name] ||= {};
           state.summaryMetaOverrides[name].courseGroup = Number(select.value) || 1;
+          render();
+        });
+      });
+      el("summaryTable").querySelectorAll("[data-main-lap-item]").forEach((select) => {
+        select.addEventListener("change", () => {
+          const key = select.dataset.mainLapItem;
+          if (select.value) state.lapItemOverrides[key] = select.value;
+          else delete state.lapItemOverrides[key];
           render();
         });
       });
@@ -4272,6 +4358,17 @@
           snapshot.summaryMetaOverrides ||= {};
           snapshot.summaryMetaOverrides[name] ||= {};
           snapshot.summaryMetaOverrides[name].courseGroup = Number(select.value) || 1;
+          refreshSnapshotSummary(snapshot, Number(select.dataset.snapshotIndex));
+        });
+      });
+      list.querySelectorAll("[data-snapshot-lap-item]").forEach((select) => {
+        select.addEventListener("change", () => {
+          const snapshot = snapshots[Number(select.dataset.snapshotIndex)];
+          if (!snapshot) return;
+          snapshot.lapItemOverrides ||= {};
+          const key = select.dataset.snapshotLapItem;
+          if (select.value) snapshot.lapItemOverrides[key] = select.value;
+          else delete snapshot.lapItemOverrides[key];
           refreshSnapshotSummary(snapshot, Number(select.dataset.snapshotIndex));
         });
       });
@@ -4492,9 +4589,13 @@
               resultCells.splice(6, 0, `<td class="result">${escapeHtml(itemPb?.pb || "")}</td>`);
               const intensityCells = tripColumns.map(({ columnIndex }) => {
                 const seconds = parsePbSeconds(String(row[columnIndex] || "").trim().split(/\s+/)[0] || "");
-                const label = intensityLabel(itemPb?.seconds, seconds);
-                const percent = label ? Number(label.replace("%", "")) : NaN;
-                return `<td class="intensity-value ${intensityClass(percent)}">${label}</td>`;
+                const tripIndex = tripColumns.findIndex((tripColumn) => tripColumn.columnIndex === columnIndex);
+                const info = lapIntensityInfo(name, row[3], seconds, tripIndex, snapshot.lapItemOverrides || {});
+                const selector = info.showCorrection
+                  ? renderLapItemSelect(name, row[3], tripIndex, snapshot.lapItemOverrides || {}, `data-snapshot-index="${index}" data-snapshot-lap-item="${escapeHtml(info.key)}"`)
+                  : "";
+                const value = info.label || (info.selectedItem ? `<span class="no-pb-note">尚無PB</span>` : "");
+                return `<td class="intensity-value ${intensityClass(info.percent)}"><span class="intensity-editor">${selector}${value}</span></td>`;
               }).join("");
               const pbIndex = headers.indexOf("PB");
               const avgIndex = headers.indexOf("平均");
@@ -4854,6 +4955,7 @@
       state.entries = [];
       state.issues = [];
       state.summaryMetaOverrides = {};
+      state.lapItemOverrides = {};
       render();
       setStatus("已清空整理結果。");
     });
@@ -4945,6 +5047,7 @@
         sessionGroup: courseSettings.sessionGroup,
         courseSettings,
         summaryMetaOverrides: JSON.parse(JSON.stringify(state.summaryMetaOverrides || {})),
+        lapItemOverrides: JSON.parse(JSON.stringify(state.lapItemOverrides || {})),
         summaryTableRows: currentSummaryTableRows(state.entries, {
           courseSettings,
           summaryMetaOverrides: state.summaryMetaOverrides || {},
@@ -4963,6 +5066,7 @@
       state.entries = [];
       state.issues = [];
       state.summaryMetaOverrides = {};
+      state.lapItemOverrides = {};
       el("commandBox").value = "";
       const charCount = el("charCount");
       if (charCount) charCount.textContent = "0 / 300";
@@ -5253,7 +5357,6 @@
       const laps = [];
       grouped(snapshot.entries || []).forEach(({ name, trips }) => {
         const meta = summaryMetaForContext(name, snapshot.entries || [], settings, snapshot.summaryMetaOverrides || {});
-        const itemPb = getPb(name, meta.item);
         const metrics = swimmerMetrics(trips);
         trips.forEach((trip, index) => {
           if (!trip.back || (!trip.start && !(trip.back.deductSeconds || 0))) return;
@@ -5264,13 +5367,17 @@
             ? backTotal - startTotal - (trip.back.deductSeconds || 0)
             : backTotal - (trip.back.deductSeconds || 0);
           if (!Number.isFinite(resultSeconds) || resultSeconds < 0) return;
+          const actualItem = actualLapItem(name, meta.item, index, snapshot.lapItemOverrides || {});
+          const itemPb = getPb(name, actualItem);
           const intensity = itemPb?.seconds
             ? Math.round((itemPb.seconds / resultSeconds) * 10000) / 100
             : "";
           laps.push({
             courseGroup: meta.groupLabel,
             name,
-            item: meta.item || "",
+            item: actualItem || "",
+            originalItem: meta.item || "",
+            actualItem: actualItem || "",
             timeRaw: meta.timeRaw || "",
             intervalRaw: (workouts.find((row) => row.courseGroup === meta.groupLabel) || {}).intervalRaw || "",
             lapNumber: index + 1,
@@ -5414,7 +5521,11 @@
             const cycleLabel = Number.isFinite(cycleDiff) ? `${cycleDiff > 0 ? "+" : ""}${cycleDiff}秒` : "";
             return [fmt(result), rank ? `#${rank}` : "", restLabelForTrip(trips, index), cycleLabel];
           });
-          const intensityCells = results.slice(0, lastTrip).map((result) => intensityLabel(itemPb?.seconds, result));
+          const intensityCells = results.slice(0, lastTrip).map((result, index) => {
+            const info = lapIntensityInfo(name, meta.item, result, index, snapshot.lapItemOverrides || {});
+            const prefix = info.selectedItem ? `${info.actualItem} ` : "";
+            return info.label ? `${prefix}${info.label}` : (info.selectedItem ? `${info.actualItem} 尚無PB` : "");
+          });
           sections.get(key).records.push({
             session,
             name,
