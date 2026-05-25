@@ -5378,6 +5378,104 @@
         .flatMap((section) => normalizedDailySectionRows(section));
     }
 
+    function dailyStyledSummaryRows(fallbackDate) {
+      const sections = new Map();
+      for (const snapshot of snapshots) {
+        const entries = snapshot.entries || [];
+        const settings = normalizeCourseSettings(snapshot.courseSettings);
+        const date = snapshot.date || fallbackDate;
+        const session = `第${settings.sessionGroup || 1}組`;
+        const key = `${date}|||${session}`;
+        if (!sections.has(key)) sections.set(key, { date, session, records: [] });
+        grouped(entries).forEach(({ name, trips }) => {
+          const meta = summaryMetaForContext(name, entries, settings, snapshot.summaryMetaOverrides || {});
+          const results = trips.map((trip) => {
+            if (!trip.back || (!trip.start && !(trip.back.deductSeconds || 0))) return null;
+            const backTotal = entryTotal(trip.back);
+            const startTotal = entryTotal(trip.start);
+            if (!Number.isFinite(backTotal) || (trip.start && !Number.isFinite(startTotal))) return null;
+            return trip.start
+              ? backTotal - startTotal - (trip.back.deductSeconds || 0)
+              : backTotal - (trip.back.deductSeconds || 0);
+          });
+          const valid = results.filter((value) => value !== null && value >= 0);
+          if (!valid.length) return;
+          const lastTrip = results.reduce((last, value, index) => value !== null ? index + 1 : last, 0);
+          const personalRanks = personalRankMap(results);
+          const intervalDiffs = courseIntervalDiffMap(trips, meta.time?.total);
+          const metrics = swimmerMetrics(trips);
+          const avg = Math.round(valid.reduce((sum, value) => sum + value, 0) / valid.length);
+          const itemPb = getPb(name, meta.item);
+          const scoreCells = results.slice(0, lastTrip).map((result, index) => {
+            if (result === null) return "";
+            if (result < 0) return "回來早於出發";
+            const rank = personalRanks.get(index);
+            const cycleDiff = intervalDiffs.get(index);
+            const cycleLabel = Number.isFinite(cycleDiff) ? `${cycleDiff > 0 ? "+" : ""}${cycleDiff}秒` : "";
+            return [fmt(result), rank ? `#${rank}` : "", restLabelForTrip(trips, index), cycleLabel]
+              .filter(Boolean)
+              .join(" ");
+          });
+          const intensityCells = results.slice(0, lastTrip).map((result) => intensityLabel(itemPb?.seconds, result));
+          sections.get(key).records.push({
+            session,
+            name,
+            personOrder: meta.personOrder,
+            groupLabel: meta.groupLabel,
+            item: meta.item,
+            timeRaw: meta.timeRaw,
+            itemPb: itemPb?.pb || "",
+            scoreCells,
+            intensityCells,
+            tripCount: lastTrip,
+            completed: valid.length,
+            pb: fmt(metrics.pb),
+            pbTrip: metrics.bestTrip,
+            difference: metrics.improvement === "" ? "" : `${metrics.improvement > 0 ? "+" : ""}${metrics.improvement}秒`,
+            average: fmt(avg),
+            pbIntensity: intensityLabel(itemPb?.seconds, metrics.pb),
+            averageIntensity: intensityLabel(itemPb?.seconds, avg),
+          });
+        });
+      }
+      return Array.from(sections.values())
+        .sort((a, b) => {
+          const dateDiff = String(a.date).localeCompare(String(b.date));
+          if (dateDiff) return dateDiff;
+          return sessionNumber(a.session) - sessionNumber(b.session);
+        })
+        .flatMap((section) => {
+          const baseHeaders = ["組", "出發序", "課表組", "課表內容", "當趟含休", "姓名", "項目PB"];
+          const metricHeaders = ["完成", "PB", "PB趟次", "首末差", "平均"];
+          const maxTrips = Math.max(0, ...section.records.map((record) => record.tripCount));
+          const records = section.records.slice().sort((a, b) => {
+            const groupDiff = courseGroupOrder(a.groupLabel) - courseGroupOrder(b.groupLabel);
+            if (groupDiff) return groupDiff;
+            const orderDiff = (Number(a.personOrder) || 999) - (Number(b.personOrder) || 999);
+            if (orderDiff) return orderDiff;
+            return String(a.name).localeCompare(String(b.name), "zh-Hant");
+          });
+          const rows = [
+            [section.date, section.session],
+            [...baseHeaders, ...Array.from({ length: maxTrips }, (_, index) => `第${index + 1}趟成績`), ...metricHeaders],
+          ];
+          records.forEach((record) => {
+            const scores = Array.from({ length: maxTrips }, (_, index) => record.scoreCells[index] || "");
+            const strengths = Array.from({ length: maxTrips }, (_, index) => record.intensityCells[index] || "");
+            rows.push([
+              record.session, record.personOrder, record.groupLabel, record.item, record.timeRaw, record.name, record.itemPb,
+              ...scores, record.completed, record.pb, record.pbTrip, record.difference, record.average,
+            ]);
+            rows.push([
+              "", "", record.groupLabel, "", "", "強度", "",
+              ...strengths, "", record.pbIntensity, "", "", record.averageIntensity,
+            ]);
+          });
+          rows.push([], []);
+          return rows;
+        });
+    }
+
     async function saveResultToDrive() {
       const date = currentResultDate();
       const title = sessionGroupLabel();
@@ -5468,13 +5566,14 @@
       const totalSheetName = `${fallbackDate}總表`;
       setStatus(`正在上傳整理總表到 ${totalSheetName}...`, "good");
       try {
-        const allRows = dailySummaryRows(fallbackDate);
+        const allRows = dailyStyledSummaryRows(fallbackDate);
         if (!allRows.length) throw new Error("empty summary");
         const result = await sheetAction({
           action: "saveResult",
           date: fallbackDate,
           sheetName: totalSheetName,
           overwrite: true,
+          format: "coachSummary",
           title: `${fallbackDate} 整理總表`,
           rows: allRows,
         });
