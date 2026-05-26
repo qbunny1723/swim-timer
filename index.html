@@ -2742,6 +2742,23 @@
       return count ? `${title} · ${count}人` : title;
     }
 
+    function compactDisplayDate(value) {
+      const text = String(value || "").trim();
+      if (!text) return "";
+      const compact = text.match(/^(\d{4})[-/]?(\d{2})[-/]?(\d{2})$/);
+      if (compact) return `${compact[1]}${compact[2]}${compact[3]}`;
+      const loose = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (loose) return `${loose[1]}${loose[2].padStart(2, "0")}${loose[3].padStart(2, "0")}`;
+      const parsed = new Date(text);
+      if (!Number.isNaN(parsed.getTime())) {
+        const year = parsed.getFullYear();
+        const month = String(parsed.getMonth() + 1).padStart(2, "0");
+        const day = String(parsed.getDate()).padStart(2, "0");
+        return `${year}${month}${day}`;
+      }
+      return text;
+    }
+
     function cloudBackupMeta(item) {
       const parts = [];
       if (item?.sessionGroup) parts.push(`第${item.sessionGroup}組`);
@@ -6071,7 +6088,7 @@
             <div class="load-backup-list">
               ${backupDates.map((item, index) => `
                 <button type="button" class="secondary" data-backup-date="${escapeHtml(item.date)}">
-                  ${escapeHtml(item.date || `日期 ${index + 1}`)}
+                  ${escapeHtml(compactDisplayDate(item.date) || `日期 ${index + 1}`)}
                   <span class="load-backup-meta">${Number(item.count || 0)} 筆備份</span>
                 </button>
               `).join("")}
