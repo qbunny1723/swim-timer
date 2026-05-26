@@ -2431,7 +2431,7 @@
           <button id="uploadSnapshotsBtn" class="btn-save-coral">上傳備份</button>
           <button id="clearSnapshotsBtn" class="danger">清空暫存</button>
           <button id="uploadSummaryBtn" class="secondary">上傳整理總表</button>
-          <button id="coachExcelBtn" class="secondary">下載教練Excel</button>
+          <button id="coachPdfBtn" class="secondary">下載教練PDF</button>
           <button id="loadSnapshotsBtn" class="secondary">載入備份</button>
           <button id="uploadHistoryBtn">寫入歷史資料</button>
         </div>
@@ -5351,7 +5351,7 @@
     el("uploadSnapshotsBtn").addEventListener("click", uploadSnapshotsToDrive);
     el("loadSnapshotsBtn").addEventListener("click", loadSnapshotsFromDrive);
     el("uploadSummaryBtn").addEventListener("click", uploadSnapshotSummaryToDrive);
-    el("coachExcelBtn").addEventListener("click", downloadCoachExcel);
+    el("coachPdfBtn").addEventListener("click", downloadCoachPdf);
     el("uploadHistoryBtn").addEventListener("click", uploadHistoryData);
     el("clearSnapshotsBtn").addEventListener("click", clearSnapshots);
     settingsToggleBtn.addEventListener("click", (event) => {
@@ -6253,9 +6253,9 @@
       }
     }
 
-    function downloadCoachExcel() {
+    function downloadCoachPdf() {
       if (!snapshots.length) {
-        setStatus("目前沒有暫存紀錄可以下載教練 Excel。", "bad");
+        setStatus("目前沒有暫存紀錄可以下載教練 PDF。", "bad");
         return;
       }
       const fallbackDate = currentResultDate();
@@ -6264,27 +6264,162 @@
         setStatus("目前沒有暫存整理表可以下載。", "bad");
         return;
       }
-      const htmlRows = rows.map((row, rowIndex) => {
-        const cells = row.map((cell) => {
-          const isSectionTitle = row.length <= 2 && /^\d{4}/.test(String(row[0] || ""));
-          const tag = isSectionTitle || row[0] === "組" ? "th" : "td";
-          return `<${tag}>${escapeHtml(cell)}</${tag}>`;
-        }).join("");
-        return `<tr>${cells}</tr>`;
-      }).join("");
-      const html = `<!doctype html><html><head><meta charset="utf-8">
-        <style>
-          table { border-collapse: collapse; font-family: "Microsoft JhengHei", Arial, sans-serif; }
-          th, td { border: 1px solid #d9d9d9; padding: 6px 9px; white-space: nowrap; }
-          th { background: #f3f6f8; font-weight: 700; }
-        </style></head><body><table>${htmlRows}</table></body></html>`;
-      const blob = new Blob(["\uFEFF", html], { type: "application/vnd.ms-excel;charset=utf-8" });
+      const pages = coachPdfPages(rows, fallbackDate);
+      const blob = buildImagePdf(pages);
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `${fallbackDate}_游泳整理總表.xls`;
+      link.download = `${fallbackDate}_游泳整理總表.pdf`;
       link.click();
       URL.revokeObjectURL(link.href);
-      setStatus(`已下載 ${fallbackDate}_游泳整理總表.xls。`, "good");
+      setStatus(`已下載 ${fallbackDate}_游泳整理總表.pdf。`, "good");
+    }
+
+    function coachPdfPages(rows, fallbackDate) {
+      const pageWidth = 842;
+      const pageHeight = 595;
+      const margin = 22;
+      const contentWidth = pageWidth - margin * 2;
+      const contentHeight = pageHeight - margin * 2;
+      const titleHeight = 30;
+      const rowHeight = 22;
+      const scale = 2;
+      const pages = [];
+      const chunks = [];
+      let current = [];
+      let used = titleHeight;
+      rows.forEach((row) => {
+        const height = row.some((cell) => String(cell || "").trim()) ? rowHeight : 12;
+        if (current.length && used + height > contentHeight) {
+          chunks.push(current);
+          current = [];
+          used = titleHeight;
+        }
+        current.push(row);
+        used += height;
+      });
+      if (current.length) chunks.push(current);
+      chunks.forEach((chunk, pageIndex) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = pageWidth * scale;
+        canvas.height = pageHeight * scale;
+        const ctx = canvas.getContext("2d");
+        ctx.scale(scale, scale);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, pageWidth, pageHeight);
+        ctx.fillStyle = "#19324B";
+        ctx.fillRect(0, 0, pageWidth, 44);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "700 16px Microsoft JhengHei, Arial";
+        ctx.fillText(`${fallbackDate} 游泳整理總表`, margin, 28);
+        ctx.font = "600 10px Microsoft JhengHei, Arial";
+        ctx.fillText(`第 ${pageIndex + 1} / ${chunks.length} 頁`, pageWidth - margin - 64, 28);
+
+        const maxColumns = Math.max(...chunk.map((row) => row.length), 1);
+        const widths = Array.from({ length: maxColumns }, (_, column) => {
+          const sample = chunk.map((row) => String(row[column] || ""));
+          const maxLength = Math.max(2, ...sample.map((text) => text.length));
+          return Math.min(92, Math.max(42, maxLength * 9 + 16));
+        });
+        const widthScale = Math.min(1, contentWidth / widths.reduce((sum, width) => sum + width, 0));
+        const finalWidths = widths.map((width) => Math.max(32, width * widthScale));
+        let y = 56;
+        chunk.forEach((row) => {
+          const isBlank = !row.some((cell) => String(cell || "").trim());
+          const isSectionTitle = row.length <= 2 && /^\d{4}/.test(String(row[0] || ""));
+          const isHeader = row[0] === "組";
+          const height = isBlank ? 12 : rowHeight;
+          if (isBlank) {
+            y += height;
+            return;
+          }
+          let x = margin;
+          const bg = isSectionTitle ? "#DCE7F1" : isHeader ? "#FFF0F7" : "#FFFFFF";
+          row.forEach((cell, column) => {
+            const width = finalWidths[column] || 44;
+            ctx.fillStyle = bg;
+            ctx.fillRect(x, y, width, height);
+            ctx.strokeStyle = "#D6E0E8";
+            ctx.lineWidth = 0.7;
+            ctx.strokeRect(x, y, width, height);
+            ctx.fillStyle = isSectionTitle ? "#19324B" : isHeader ? "#542645" : "#243746";
+            ctx.font = `${isSectionTitle || isHeader ? "700" : "500"} 9px Microsoft JhengHei, Arial`;
+            drawPdfCellText(ctx, String(cell || ""), x + 4, y + 14, width - 8);
+            x += width;
+          });
+          y += height;
+        });
+        pages.push({
+          width: pageWidth,
+          height: pageHeight,
+          data: canvas.toDataURL("image/jpeg", 0.92).split(",")[1],
+        });
+      });
+      return pages;
+    }
+
+    function drawPdfCellText(ctx, text, x, y, maxWidth) {
+      if (!text) return;
+      let clipped = text;
+      while (clipped.length && ctx.measureText(clipped).width > maxWidth) {
+        clipped = clipped.slice(0, -1);
+      }
+      if (clipped !== text && clipped.length > 1) clipped = clipped.slice(0, -1) + "…";
+      ctx.fillText(clipped, x, y);
+    }
+
+    function buildImagePdf(pages) {
+      const encoder = new TextEncoder();
+      const parts = [];
+      const offsets = [0];
+      let length = 0;
+      const addText = (text) => {
+        const bytes = encoder.encode(text);
+        parts.push(bytes);
+        length += bytes.length;
+      };
+      const addBytes = (bytes) => {
+        parts.push(bytes);
+        length += bytes.length;
+      };
+      addText("%PDF-1.4\n");
+      const objectCount = 2 + pages.length * 3;
+      const writeObject = (id, bodyParts) => {
+        offsets[id] = length;
+        addText(`${id} 0 obj\n`);
+        bodyParts.forEach((part) => typeof part === "string" ? addText(part) : addBytes(part));
+        addText("\nendobj\n");
+      };
+      const pageIds = pages.map((_, index) => 3 + index * 3);
+      writeObject(1, [`<< /Type /Catalog /Pages 2 0 R >>`]);
+      writeObject(2, [`<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`]);
+      pages.forEach((page, index) => {
+        const pageId = 3 + index * 3;
+        const contentId = pageId + 1;
+        const imageId = pageId + 2;
+        const imageBytes = base64ToBytes(page.data);
+        const stream = `q\n${page.width} 0 0 ${page.height} 0 0 cm\n/Im${index} Do\nQ`;
+        writeObject(pageId, [`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page.width} ${page.height}] /Resources << /XObject << /Im${index} ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>`]);
+        writeObject(contentId, [`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`]);
+        writeObject(imageId, [
+          `<< /Type /XObject /Subtype /Image /Width ${page.width * 2} /Height ${page.height * 2} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imageBytes.length} >>\nstream\n`,
+          imageBytes,
+          `\nendstream`,
+        ]);
+      });
+      const xrefStart = length;
+      addText(`xref\n0 ${objectCount + 1}\n0000000000 65535 f \n`);
+      for (let id = 1; id <= objectCount; id++) {
+        addText(`${String(offsets[id]).padStart(10, "0")} 00000 n \n`);
+      }
+      addText(`trailer\n<< /Size ${objectCount + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`);
+      return new Blob(parts, { type: "application/pdf" });
+    }
+
+    function base64ToBytes(base64) {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes;
     }
 
     function summaryText() {
