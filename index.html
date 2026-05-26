@@ -776,27 +776,6 @@
       background: color-mix(in srgb, var(--accent-soft), transparent 42%);
     }
 
-    tr.mobile-rest-row {
-      display: none;
-    }
-
-    .mobile-only {
-      display: none;
-    }
-
-    .mobile-row-label {
-      font-weight: 800;
-      color: var(--muted);
-    }
-
-    .rest-cell {
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 800;
-      text-align: center;
-      background: color-mix(in srgb, var(--accent-soft), transparent 62%);
-    }
-
     td.intensity-label {
       font-weight: 800;
       color: var(--muted);
@@ -2188,28 +2167,6 @@
       }
       button { min-height: 46px; }
       .table-wrap { max-height: 70dvh; }
-      #summaryTable .mobile-hide,
-      .snapshot-preview table .mobile-hide {
-        display: none;
-      }
-      #summaryTable tr.mobile-rest-row,
-      .snapshot-preview table tr.mobile-rest-row {
-        display: table-row;
-      }
-      #summaryTable .mobile-only,
-      .snapshot-preview table .mobile-only {
-        display: table-cell;
-      }
-      #summaryTable .summary-score-row .rest-badge,
-      #summaryTable .summary-score-row .cycle-diff-badge,
-      .snapshot-preview .summary-score-row .rest-badge,
-      .snapshot-preview .summary-score-row .cycle-diff-badge {
-        display: none;
-      }
-      #summaryTable td.result,
-      .snapshot-preview td.result {
-        min-width: 76px;
-      }
       th, td {
         padding: 9px 8px;
         font-size: 13px;
@@ -4361,10 +4318,10 @@
       el("summaryTable").innerHTML = `
         <thead>
           <tr>
-            <th class="mobile-hide">組</th><th class="mobile-hide">序</th><th>課表</th><th class="mobile-hide">內容/含休</th>
-            <th>姓名</th><th class="mobile-hide">PB參考</th>
+            <th>組</th><th>序</th><th>課表</th><th>內容/含休</th>
+            <th>姓名</th><th>PB參考</th>
             ${Array.from({ length: maxTrips }, (_, i) => `<th>第${i + 1}趟</th>`).join("")}
-            <th class="mobile-hide">完成</th><th class="mobile-hide">最佳</th><th class="mobile-hide">趟次</th><th class="mobile-hide">差</th><th class="mobile-hide">平均</th>
+            <th>完成</th><th>最佳</th><th>趟次</th><th>差</th><th>平均</th>
           </tr>
         </thead>
         <tbody>
@@ -4412,12 +4369,6 @@
                   : ""
               }</td>`;
             }).join("");
-            const restCells = Array.from({ length: maxTrips }, (_, i) => {
-              const restLabel = restLabelForTrip(trips, i);
-              const cycleDiff = intervalDiffs.get(i);
-              const cycleDiffLabel = Number.isFinite(cycleDiff) ? `${cycleDiff > 0 ? "+" : ""}${cycleDiff}秒` : "";
-              return `<td class="rest-cell">${[restLabel, cycleDiffLabel].filter(Boolean).map(escapeHtml).join("<br>")}</td>`;
-            }).join("");
             const intensityCells = Array.from({ length: maxTrips }, (_, i) => {
               const result = results[i];
               const info = lapIntensityInfo(name, meta.item, result, i);
@@ -4428,35 +4379,28 @@
             const pbIntensityPercent = pbIntensityLabel ? Number(pbIntensityLabel.replace("%", "")) : NaN;
             const avgIntensityLabel = intensityLabel(itemPb?.seconds, avg);
             const avgIntensityPercent = avgIntensityLabel ? Number(avgIntensityLabel.replace("%", "")) : NaN;
-            return `<tr class="summary-score-row">
-              <td class="mobile-hide"><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("main", "", "", "sessionGroup")'>${escapeHtml(sessionGroupLabel())}</button></td>
-              <td class="mobile-hide"><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("main", "", ${JSON.stringify(name)}, "personOrder")'>${escapeHtml(meta.personOrder)}</button></td>
+            return `<tr>
+              <td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("main", "", "", "sessionGroup")'>${escapeHtml(sessionGroupLabel())}</button></td>
+              <td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("main", "", ${JSON.stringify(name)}, "personOrder")'>${escapeHtml(meta.personOrder)}</button></td>
               <td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("main", "", ${JSON.stringify(name)}, "courseGroup")'>${escapeHtml(courseGroupLetter(meta.courseGroup))}</button></td>
-              <td class="mobile-hide">${escapeHtml(workoutSummaryLabel(meta.item, meta.timeRaw))}</td>
+              <td>${escapeHtml(workoutSummaryLabel(meta.item, meta.timeRaw))}</td>
               <td><strong>${escapeHtml(name)}</strong></td>
-              <td class="result mobile-hide">${escapeHtml(itemPb?.pb || "")}</td>
+              <td class="result">${escapeHtml(itemPb?.pb || "")}</td>
               ${resultCells}
-              <td class="mobile-hide">${valid.length}</td>
-              <td class="result mobile-hide">${fmt(metrics.pb)}</td>
-              <td class="mobile-hide">${metrics.bestTrip}</td>
-              <td class="mobile-hide ${metrics.improvement > 0 ? "metric-good" : "metric-muted"}">${metrics.improvement === "" ? "" : (metrics.improvement > 0 ? `+${metrics.improvement}秒` : `${metrics.improvement}秒`)}</td>
-              <td class="mobile-hide">${fmt(avg)}</td>
-            </tr>
-            <tr class="mobile-rest-row">
-              <td></td>
-              <td class="mobile-row-label">休息</td>
-              ${restCells}
+              <td>${valid.length}</td>
+              <td class="result">${fmt(metrics.pb)}</td>
+              <td>${metrics.bestTrip}</td>
+              <td class="${metrics.improvement > 0 ? "metric-good" : "metric-muted"}">${metrics.improvement === "" ? "" : (metrics.improvement > 0 ? `+${metrics.improvement}秒` : `${metrics.improvement}秒`)}</td>
+              <td>${fmt(avg)}</td>
             </tr>
             <tr class="intensity-row">
-              <td class="mobile-hide" colspan="5"></td>
-              <td class="intensity-label mobile-hide">${itemPb ? "強度" : ""}</td>
-              <td class="mobile-row-label mobile-only">強度</td>
-              <td class="mobile-row-label mobile-only">${itemPb ? "強度" : ""}</td>
+              <td colspan="5"></td>
+              <td class="intensity-label">${itemPb ? "強度" : ""}</td>
               ${intensityCells}
-              <td class="mobile-hide"></td>
-              <td class="intensity-value mobile-hide ${intensityClass(pbIntensityPercent)}">${pbIntensityLabel}</td>
-              <td class="mobile-hide" colspan="2"></td>
-              <td class="intensity-value mobile-hide ${intensityClass(avgIntensityPercent)}">${avgIntensityLabel}</td>
+              <td></td>
+              <td class="intensity-value ${intensityClass(pbIntensityPercent)}">${pbIntensityLabel}</td>
+              <td colspan="2"></td>
+              <td class="intensity-value ${intensityClass(avgIntensityPercent)}">${avgIntensityLabel}</td>
             </tr>`;
             }).join("") : `<tr><td colspan="${maxTrips + 11}">尚未整理。把口令貼到左邊後按「整理」。</td></tr>`}
         </tbody>`;
@@ -4766,45 +4710,33 @@
         "PB參考",
         ...headers.slice(5),
       ];
-      const headerHtml = enhancedHeaders.map((cell) => {
-        const hidden = ["組", "序", "內容/含休", "PB參考", "完成", "最佳", "趟次", "差", "平均"].includes(cell);
-        return `<th${hidden ? ` class="mobile-hide"` : ""}>${escapeHtml(cell)}</th>`;
-      }).join("");
       const plan = activeCoursePlanRowsFromSettings(snapshot.courseSettings);
       return `
         <div class="table-wrap">
           <table>
-            <thead><tr>${headerHtml}</tr></thead>
+            <thead><tr>${enhancedHeaders.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead>
             <tbody>${bodyRows.length ? bodyRows.map((row) => {
               const name = row[4] || "";
               const meta = summaryMetaForContext(name, snapshot.entries || [], normalizeCourseSettings(snapshot.courseSettings), snapshot.summaryMetaOverrides || {});
               const itemPb = effectivePb(name, meta.item, snapshot.lapPbOverrides || {});
               const resultCells = row.map((cell, cellIndex) => {
                 if (cellIndex === 1) {
-                  return `<td class="mobile-hide"><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("snapshot", ${index}, ${JSON.stringify(name)}, "personOrder")'>${escapeHtml(cell)}</button></td>`;
+                  return `<td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("snapshot", ${index}, ${JSON.stringify(name)}, "personOrder")'>${escapeHtml(cell)}</button></td>`;
                 }
                 if (cellIndex === 2) {
                   return `<td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("snapshot", ${index}, ${JSON.stringify(name)}, "courseGroup")'>${escapeHtml(cell)}</button></td>`;
                 }
                 if (cellIndex === 0) {
-                  return `<td class="mobile-hide"><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("snapshot", ${index}, "", "sessionGroup")'>${escapeHtml(cell)}</button></td>`;
-                }
-                if (headers[cellIndex] === "內容/含休") {
-                  return `<td class="mobile-hide">${escapeHtml(cell)}</td>`;
+                  return `<td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("snapshot", ${index}, "", "sessionGroup")'>${escapeHtml(cell)}</button></td>`;
                 }
                 const isScore = /^第\d+趟$/.test(headers[cellIndex] || "");
                 const isPb = headers[cellIndex] === "最佳";
                 const isProgress = headers[cellIndex] === "差" || headers[cellIndex] === "進步";
-                const isMetric = ["完成", "最佳", "趟次", "差", "平均"].includes(headers[cellIndex] || "");
-                const className = [
-                  isScore || isPb ? "result" : isProgress ? (String(cell).startsWith("+") ? "metric-good" : "metric-muted") : "",
-                  isMetric ? "mobile-hide" : "",
-                ].filter(Boolean).join(" ");
+                const className = isScore || isPb ? "result" : isProgress ? (String(cell).startsWith("+") ? "metric-good" : "metric-muted") : "";
                 const content = isScore ? formatSnapshotScoreCell(cell) : escapeHtml(cell);
                 return `<td${className ? ` class="${className}"` : ""}>${content}</td>`;
               });
-              resultCells.splice(5, 0, `<td class="result mobile-hide">${escapeHtml(itemPb?.pb || "")}</td>`);
-              const restCells = tripColumns.map(({ columnIndex }) => `<td class="rest-cell">${formatSnapshotRestCell(row[columnIndex])}</td>`).join("");
+              resultCells.splice(5, 0, `<td class="result">${escapeHtml(itemPb?.pb || "")}</td>`);
               const intensityCells = tripColumns.map(({ columnIndex }) => {
                 const seconds = parsePbSeconds(String(row[columnIndex] || "").trim().split(/\s+/)[0] || "");
                 const tripIndex = tripColumns.findIndex((tripColumn) => tripColumn.columnIndex === columnIndex);
@@ -4818,22 +4750,15 @@
               const pbIntensityPercent = pbIntensityLabel ? Number(pbIntensityLabel.replace("%", "")) : NaN;
               const avgIntensityLabel = intensityLabel(itemPb?.seconds, parsePbSeconds(row[avgIndex]));
               const avgIntensityPercent = avgIntensityLabel ? Number(avgIntensityLabel.replace("%", "")) : NaN;
-              return `<tr class="summary-score-row">${resultCells.join("")}</tr>
-                <tr class="mobile-rest-row">
-                  <td></td>
-                  <td class="mobile-row-label">休息</td>
-                  ${restCells}
-                </tr>
+              return `<tr>${resultCells.join("")}</tr>
                 <tr class="intensity-row">
-                  <td class="mobile-hide" colspan="5"></td>
-                  <td class="intensity-label mobile-hide">${itemPb ? "強度" : ""}</td>
-                  <td class="mobile-row-label mobile-only">強度</td>
-                  <td class="mobile-row-label mobile-only">${itemPb ? "強度" : ""}</td>
+                  <td colspan="5"></td>
+                  <td class="intensity-label">${itemPb ? "強度" : ""}</td>
                   ${intensityCells}
-                  <td class="mobile-hide"></td>
-                  <td class="intensity-value mobile-hide ${intensityClass(pbIntensityPercent)}">${pbIntensityLabel}</td>
-                  <td class="mobile-hide" colspan="2"></td>
-                  <td class="intensity-value mobile-hide ${intensityClass(avgIntensityPercent)}">${avgIntensityLabel}</td>
+                  <td></td>
+                  <td class="intensity-value ${intensityClass(pbIntensityPercent)}">${pbIntensityLabel}</td>
+                  <td colspan="2"></td>
+                  <td class="intensity-value ${intensityClass(avgIntensityPercent)}">${avgIntensityLabel}</td>
                 </tr>`;
             }).join("") : `<tr><td colspan="${enhancedHeaders.length}">尚無學生。</td></tr>`}</tbody>
           </table>
@@ -4857,14 +4782,6 @@
         restMatch ? `<span class="rest-badge">${escapeHtml(restMatch[0])}</span>` : "",
         diffMatch ? `<span class="cycle-diff-badge ${diffClass}">${escapeHtml(diffMatch[1])}</span>` : "",
       ].filter(Boolean).join("");
-    }
-
-    function formatSnapshotRestCell(value) {
-      const text = String(value || "").trim();
-      if (!text) return "";
-      const restMatch = text.match(/休-?\d+秒/);
-      const diffMatch = text.match(/([+-]\d+秒)/);
-      return [restMatch?.[0], diffMatch?.[1]].filter(Boolean).map(escapeHtml).join("<br>");
     }
 
     function refreshSnapshotSummary(snapshot, index) {
