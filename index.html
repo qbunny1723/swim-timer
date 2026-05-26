@@ -4076,10 +4076,18 @@
       return map;
     }
 
+    function isResetTimingTrip(trips, index) {
+      if (index <= 0) return false;
+      const previousStart = entryTotal(trips[index - 1]?.start);
+      const currentStart = entryTotal(trips[index]?.start);
+      return Number.isFinite(previousStart) && Number.isFinite(currentStart) && currentStart === previousStart;
+    }
+
     function courseIntervalDiffMap(trips, expectedSeconds) {
       const map = new Map();
       if (!Number.isFinite(expectedSeconds) || expectedSeconds <= 0) return map;
       for (let index = 1; index < trips.length; index++) {
+        if (isResetTimingTrip(trips, index)) continue;
         const previousStart = entryTotal(trips[index - 1]?.start);
         const currentStart = entryTotal(trips[index]?.start);
         if (!Number.isFinite(previousStart) || !Number.isFinite(currentStart)) continue;
@@ -4093,10 +4101,9 @@
 
     function restSecondsForTrip(trips, index) {
       if (index <= 0) return null;
+      if (isResetTimingTrip(trips, index)) return null;
       const currentStart = entryTotal(trips[index]?.start);
-      const previousStart = entryTotal(trips[index - 1]?.start);
       const previousBack = entryTotal(trips[index - 1]?.back);
-      if (currentStart === 0 && previousStart === 0) return null;
       if (!Number.isFinite(currentStart) || !Number.isFinite(previousBack)) return null;
       return Math.round((currentStart - previousBack) * 100) / 100;
     }
