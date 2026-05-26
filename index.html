@@ -964,6 +964,26 @@
       color: var(--accent);
     }
 
+    .load-backup-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .load-backup-list button {
+      width: 100%;
+      text-align: left;
+      line-height: 1.45;
+    }
+
+    .load-backup-meta {
+      display: block;
+      margin-top: 2px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
     .examples {
       background: var(--accent-soft);
       border: 1px solid var(--line);
@@ -2704,6 +2724,19 @@
     function snapshotLabel(snapshot, index) {
       const count = snapshotNames(snapshot).length;
       return `${snapshot.title || `第${index + 1}組`} · ${count}人`;
+    }
+
+    function cloudBackupLabel(item, index) {
+      const title = item?.title || `第${index + 1}組`;
+      const count = Number(item?.studentCount || 0);
+      return count ? `${title} · ${count}人` : title;
+    }
+
+    function cloudBackupMeta(item) {
+      const parts = [];
+      if (item?.sessionGroup) parts.push(`第${item.sessionGroup}組`);
+      if (item?.updatedAt) parts.push(`更新 ${String(item.updatedAt).replace("T", " ").slice(0, 16)}`);
+      return parts.join("　");
     }
 
     function savedAtValue(data) {
@@ -5548,9 +5581,64 @@
       return rows;
     }
 
+    function ensureSnapshotRecordId(snapshot) {
+      const recordId = snapshot.recordId || `REC-${snapshot.id || `${Date.now()}-${Math.random()}`}`;
+      snapshot.recordId = recordId;
+      return recordId;
+    }
+
+    function filterObjectByNames(source, names) {
+      const filtered = {};
+      Object.keys(source || {}).forEach((name) => {
+        if (names.has(name)) filtered[name] = source[name];
+      });
+      return filtered;
+    }
+
+    function snapshotBackupPayload(snapshot, fallbackDate, groupLabel, headers, filteredRows, settings) {
+      const nameIndex = headers.indexOf("姓名");
+      const names = new Set(filteredRows.map((row) => String(row[nameIndex] || "").trim()).filter(Boolean));
+      const sessionGroup = settings.sessionGroup || snapshot.sessionGroup || "1";
+      const sessionLabel = `第${sessionGroup}組`;
+      const baseRecordId = ensureSnapshotRecordId(snapshot);
+      const title = `${sessionLabel} ${groupLabel}課表`;
+      return normalizeSnapshot({
+        ...snapshot,
+        id: `${snapshot.id || baseRecordId}-${groupLabel}`,
+        recordId: `${baseRecordId}|${groupLabel}`,
+        title,
+        date: snapshot.date || fallbackDate,
+        entries: (snapshot.entries || []).filter((entry) => names.has(entry.name)).map(cloneEntry),
+        summaryTableRows: [headers, ...filteredRows],
+        sessionGroup,
+        courseSettings: settings,
+        summaryMetaOverrides: filterObjectByNames(snapshot.summaryMetaOverrides, names),
+        lapItemOverrides: filterObjectByNames(snapshot.lapItemOverrides, names),
+        lapPbOverrides: filterObjectByNames(snapshot.lapPbOverrides, names),
+        assignments: filterObjectByNames(snapshot.assignments, names),
+      });
+    }
+
+    function snapshotBackupPayloads(snapshot, fallbackDate) {
+      const date = snapshot.date || fallbackDate;
+      const settings = normalizeCourseSettings(snapshot.courseSettings);
+      const summaryRows = snapshotSummaryOnlyRows(snapshot);
+      if (summaryRows.length <= 1) return [];
+      const [headers, ...bodyRows] = summaryRows;
+      const courseGroupIndex = headers.indexOf("課表");
+      const nameIndex = headers.indexOf("姓名");
+      if (courseGroupIndex < 0 || nameIndex < 0) return [];
+      const groups = Array.from(new Set(bodyRows.map((row) => String(row[courseGroupIndex] || "").trim()).filter(Boolean)));
+      return groups.map((groupLabel) => {
+        const filteredRows = bodyRows.filter((row) => String(row[courseGroupIndex] || "").trim() === groupLabel);
+        return snapshotBackupPayload(snapshot, date, groupLabel, headers, filteredRows, settings);
+      }).filter((payload) => payload.entries.length || payload.summaryTableRows.length > 1);
+    }
+
     function snapshotBackupBlocks(snapshot, fallbackDate) {
       const date = snapshot.date || fallbackDate;
       const settings = normalizeCourseSettings(snapshot.courseSettings);
+      ensureSnapshotRecordId(snapshot);
       const sessionGroup = settings.sessionGroup || snapshot.sessionGroup || "1";
       const sessionLabel = `第${sessionGroup}組`;
       const summaryRows = snapshotSummaryOnlyRows(snapshot);
@@ -5880,11 +5968,17 @@
       }
       const fallbackDate = currentResultDate();
       const blocksByDate = new Map();
+      const payloadsByDate = new Map();
       snapshots.forEach((snapshot) => {
         snapshotBackupBlocks(snapshot, fallbackDate).forEach((block) => {
           const date = snapshot.date || fallbackDate;
           if (!blocksByDate.has(date)) blocksByDate.set(date, []);
           blocksByDate.get(date).push(block);
+        });
+        snapshotBackupPayloads(snapshot, fallbackDate).forEach((payload) => {
+          const date = payload.date || fallbackDate;
+          if (!payloadsByDate.has(date)) payloadsByDate.set(date, []);
+          payloadsByDate.get(date).push(payload);
         });
       });
       const blockCount = Array.from(blocksByDate.values()).reduce((sum, blocks) => sum + blocks.length, 0);
@@ -5905,7 +5999,7 @@
             action: "saveBackupBlocks",
             date,
             blocks,
-            snapshots: snapshots.filter((snapshot) => (snapshot.date || fallbackDate) === date),
+            snapshots: payloadsByDate.get(date) || [],
           });
           if (!result || !result.ok) throw new Error("save failed");
         }
@@ -5935,35 +6029,92 @@
       }
       setStatus("正在讀取雲端備份...", "good");
       try {
-        const result = await sheetAction({ action: "getBackupSnapshots" });
-        const cloudSnapshots = Array.isArray(result?.snapshots) ? result.snapshots.map(normalizeSnapshot) : [];
-        if (!cloudSnapshots.length) {
+        const result = await sheetAction({ action: "getBackupDates" });
+        if (!result?.ok || !Array.isArray(result.dates)) throw new Error("unsupported backup date api");
+        const backupDates = result.dates;
+        if (!backupDates.length) {
           setStatus("雲端尚無可載回的暫存備份。", "bad");
           return;
         }
-        el("detailTitle").textContent = "載入雲端備份";
-        el("detailContent").innerHTML = `
-          <p class="small">選擇一組載回暫存紀錄；相同備份會更新本機現有資料。</p>
-          <div class="load-backup-list">
-            ${cloudSnapshots.map((snapshot, index) => `<button type="button" class="secondary" data-load-cloud-snapshot="${index}" style="width:100%;margin:5px 0;">${escapeHtml(snapshot.date)}　${escapeHtml(snapshotLabel(snapshot, index))}</button>`).join("")}
-          </div>
-        `;
-        el("detailDialog").classList.add("show");
-        el("detailContent").querySelectorAll("[data-load-cloud-snapshot]").forEach((loadButton) => {
-          loadButton.addEventListener("click", () => {
-            const selected = cloudSnapshots[Number(loadButton.dataset.loadCloudSnapshot)];
-            const existingIndex = snapshots.findIndex((snapshot) => snapshot.recordId === selected.recordId);
-            if (existingIndex >= 0) snapshots[existingIndex] = selected;
-            else snapshots.push(selected);
-            saveSnapshotsLocal();
-            renderSnapshotList(existingIndex >= 0 ? existingIndex : snapshots.length - 1);
-            el("detailDialog").classList.remove("show");
-            setStatus(`已載入備份：${selected.date} ${selected.title}。`, "good");
+        const showDates = () => {
+          el("detailTitle").textContent = "載入雲端備份";
+          el("detailContent").innerHTML = `
+            <p class="small">先選日期，再選該日期的組別課表；點到確定紀錄後才會下載完整暫存資料。</p>
+            <div class="load-backup-list">
+              ${backupDates.map((item, index) => `
+                <button type="button" class="secondary" data-backup-date="${escapeHtml(item.date)}">
+                  ${escapeHtml(item.date || `日期 ${index + 1}`)}
+                  <span class="load-backup-meta">${Number(item.count || 0)} 筆備份</span>
+                </button>
+              `).join("")}
+            </div>
+          `;
+          el("detailContent").querySelectorAll("[data-backup-date]").forEach((dateButton) => {
+            dateButton.addEventListener("click", () => showSummaries(dateButton.dataset.backupDate));
           });
-        });
-        setStatus(`已找到 ${cloudSnapshots.length} 組雲端備份，請選擇載入。`, "good");
+        };
+        const showSummaries = async (date) => {
+          el("detailTitle").textContent = `${date} 備份`;
+          el("detailContent").innerHTML = `<p class="small">正在讀取 ${escapeHtml(date)} 的備份清單...</p>`;
+          setStatus(`正在讀取 ${date} 的備份清單...`, "good");
+          const summaryResult = await sheetAction({ action: "getBackupSummaries", date });
+          if (!summaryResult?.ok || !Array.isArray(summaryResult.summaries)) throw new Error("unsupported backup summary api");
+          const summaries = summaryResult.summaries;
+          if (!summaries.length) {
+            el("detailContent").innerHTML = `
+              <p class="small">這個日期目前沒有可載入的備份。</p>
+              <div class="load-backup-list"><button type="button" class="secondary" data-backup-back>回日期列表</button></div>
+            `;
+            el("detailContent").querySelector("[data-backup-back]")?.addEventListener("click", showDates);
+            setStatus(`${date} 沒有可載入的備份。`, "bad");
+            return;
+          }
+          el("detailContent").innerHTML = `
+            <p class="small">選擇一筆載回暫存紀錄；相同備份會更新本機現有資料。</p>
+            <div class="load-backup-list">
+              <button type="button" class="secondary" data-backup-back>← 回日期列表</button>
+              ${summaries.map((item, index) => `
+                <button type="button" class="secondary" data-load-cloud-record="${escapeHtml(item.recordId)}">
+                  ${escapeHtml(cloudBackupLabel(item, index))}
+                  <span class="load-backup-meta">${escapeHtml(cloudBackupMeta(item))}</span>
+                </button>
+              `).join("")}
+            </div>
+          `;
+          el("detailContent").querySelector("[data-backup-back]")?.addEventListener("click", showDates);
+          el("detailContent").querySelectorAll("[data-load-cloud-record]").forEach((loadButton) => {
+            loadButton.addEventListener("click", async () => {
+              const recordId = loadButton.dataset.loadCloudRecord;
+              const selectedSummary = summaries.find((item) => item.recordId === recordId) || {};
+              const originalLoadText = loadButton.innerHTML;
+              loadButton.disabled = true;
+              loadButton.textContent = "載入中...";
+              try {
+                setStatus(`正在載入備份：${selectedSummary.title || recordId}...`, "good");
+                const snapshotResult = await sheetAction({ action: "getBackupSnapshot", recordId });
+                if (!snapshotResult?.ok || !snapshotResult.snapshot) throw new Error("missing snapshot");
+                const selected = normalizeSnapshot(snapshotResult.snapshot);
+                const existingIndex = snapshots.findIndex((snapshot) => snapshot.recordId === selected.recordId);
+                if (existingIndex >= 0) snapshots[existingIndex] = selected;
+                else snapshots.push(selected);
+                saveSnapshotsLocal();
+                renderSnapshotList(existingIndex >= 0 ? existingIndex : snapshots.length - 1);
+                el("detailDialog").classList.remove("show");
+                setStatus(`已載入備份：${selected.date} ${selected.title}。`, "good");
+              } catch {
+                loadButton.disabled = false;
+                loadButton.innerHTML = originalLoadText;
+                setStatus("載入這筆備份失敗：請確認 Apps Script 已重新部署。", "bad");
+              }
+            });
+          });
+          setStatus(`已找到 ${summaries.length} 筆 ${date} 備份，請選擇載入。`, "good");
+        };
+        showDates();
+        el("detailDialog").classList.add("show");
+        setStatus(`已找到 ${backupDates.length} 個備份日期，請先選日期。`, "good");
       } catch {
-        setStatus("載入備份失敗：請先部署最新版 Apps Script。", "bad");
+        setStatus("載入備份失敗：請確認已部署支援分段載入的最新版 Apps Script。", "bad");
       } finally {
         if (button) {
           button.disabled = false;
