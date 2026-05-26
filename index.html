@@ -876,7 +876,8 @@
       font-weight: 850;
     }
 
-    .intensity-correct-btn {
+    .intensity-correct-btn,
+    .table-edit-btn {
       min-height: 0;
       padding: 0;
       border: 0;
@@ -1282,10 +1283,6 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
       margin-bottom: 10px;
-    }
-
-    .snapshot-actions #uploadHistoryBtn {
-      grid-column: 1 / -1;
     }
 
     .snapshot-list {
@@ -2399,6 +2396,7 @@
           <button id="clearSnapshotsBtn" class="danger">清空暫存</button>
           <button id="uploadSummaryBtn" class="secondary">上傳整理總表</button>
           <button id="coachExcelBtn" class="secondary">下載教練Excel</button>
+          <button id="loadSnapshotsBtn" class="secondary">載入備份</button>
           <button id="uploadHistoryBtn">寫入歷史資料</button>
         </div>
         <div id="snapshotList" class="snapshot-list"></div>
@@ -2434,7 +2432,7 @@
     const PB_DATA_KEY = "swimTimerPbData";
     const maxTrips = 6;
     const COURSE_GROUPS = ["A", "B", "C", "D", "E"];
-    const state = { entries: [], issues: [], summaryMetaOverrides: {}, lapItemOverrides: {} };
+    const state = { entries: [], issues: [], summaryMetaOverrides: {}, lapItemOverrides: {}, lapPbOverrides: {} };
     const parseState = { source: "", items: [], issues: [] };
     const pbState = { headers: [], rows: [], byNameItem: new Map(), studentCount: 0, loadedAt: "" };
     let snapshots = [];
@@ -2670,6 +2668,7 @@
         courseSettings,
         summaryMetaOverrides: snapshot?.summaryMetaOverrides || {},
         lapItemOverrides: snapshot?.lapItemOverrides || {},
+        lapPbOverrides: snapshot?.lapPbOverrides || {},
         summaryTableRows: Array.isArray(snapshot?.summaryTableRows)
           ? snapshot.summaryTableRows.map((row) => Array.isArray(row) ? row.slice() : [row])
           : [],
@@ -2996,21 +2995,37 @@
       return `${Math.round((pbSeconds / resultSeconds) * 100)}%`;
     }
 
+    function averageSeconds(values) {
+      return values.length ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 100) / 100 : "";
+    }
+
     function lapItemKey(name, tripIndex) {
       return `${String(name || "").trim()}|||${tripIndex + 1}`;
+    }
+
+    function pbOverrideKey(name, item) {
+      return `${String(name || "").trim()}|||${normalizePbItem(item)}`;
+    }
+
+    function effectivePb(name, item, pbOverrides = state.lapPbOverrides) {
+      const override = pbOverrides?.[pbOverrideKey(name, item)];
+      if (override && Number.isFinite(Number(override.seconds))) {
+        return { name, item, pb: override.pb || fmt(Number(override.seconds)), seconds: Number(override.seconds), temporary: true };
+      }
+      return getPb(name, item);
     }
 
     function actualLapItem(name, plannedItem, tripIndex, overrides = state.lapItemOverrides) {
       return String(overrides?.[lapItemKey(name, tripIndex)] || "").trim() || String(plannedItem || "").trim();
     }
 
-    function lapIntensityInfo(name, plannedItem, result, tripIndex, overrides = state.lapItemOverrides) {
+    function lapIntensityInfo(name, plannedItem, result, tripIndex, overrides = state.lapItemOverrides, pbOverrides = state.lapPbOverrides) {
       const key = lapItemKey(name, tripIndex);
       const selectedItem = String(overrides?.[key] || "").trim();
       const actualItem = selectedItem || plannedItem;
-      const actualPb = getPb(name, actualItem);
+      const actualPb = effectivePb(name, actualItem, pbOverrides);
       const label = intensityLabel(actualPb?.seconds, result);
-      const originalLabel = intensityLabel(getPb(name, plannedItem)?.seconds, result);
+      const originalLabel = intensityLabel(effectivePb(name, plannedItem, pbOverrides)?.seconds, result);
       const originalPercent = originalLabel ? Number(originalLabel.replace("%", "")) : NaN;
       return {
         key,
@@ -3019,12 +3034,12 @@
         actualPb,
         label,
         percent: label ? Number(label.replace("%", "")) : NaN,
-        showCorrection: !!selectedItem || originalPercent > 100,
+        showCorrection: Number.isFinite(result) && (!!selectedItem || !actualPb || originalPercent > 100),
       };
     }
 
     function intensityCorrectionHtml(info, name, plannedItem, tripIndex, scope, snapshotIndex = "") {
-      const value = info.label || (info.selectedItem ? "尚無PB" : "");
+      const value = info.label || (info.showCorrection ? "尚無PB" : "");
       if (!value) return "";
       if (!info.showCorrection) return escapeHtml(value);
       const args = [scope, snapshotIndex, name, plannedItem, tripIndex + 1].map((entry) => JSON.stringify(entry)).join(",");
@@ -3405,8 +3420,8 @@
       text = text.replace(/扣.*$/, "");
       text = text.replace(/分0?([0-9])秒$/, "分$1秒");
 
-      const colon = text.match(/^(\d+)[:：](\d{1,2})$/);
-      if (colon) return timeObj(Number(colon[1]), Number(colon[2]));
+      const colon = text.match(/^(\d+)[:：](\d{1,2})(?:[.．](\d{1,2}))?$/);
+      if (colon) return timeObj(Number(colon[1]), Number(colon[2]), Number(String(colon[3] || "").padEnd(2, "0")) || 0);
 
       const minSec = text.match(/^([0-9一二三四五六七八九十]+)分([0-9一二三四五六七八九十]+)秒?$/);
       if (minSec) return timeObj(chineseNumberToInt(minSec[1]), chineseNumberToInt(minSec[2]));
@@ -3418,7 +3433,13 @@
       if (secOnly) return timeObj(0, chineseNumberToInt(secOnly[1]));
 
       const numericText = normalizeDigits(text);
-      if (/^\d{1,4}$/.test(numericText)) {
+      if (/^\d{4}$/.test(numericText)) {
+        return timeObj(0, Number(numericText.slice(0, 2)), Number(numericText.slice(-2)));
+      }
+      if (/^\d{5}$/.test(numericText)) {
+        return timeObj(Number(numericText.slice(0, -4)), Number(numericText.slice(-4, -2)), Number(numericText.slice(-2)));
+      }
+      if (/^\d{1,3}$/.test(numericText)) {
         const padded = numericText.padStart(3, "0");
         const minute = Number(padded.slice(0, -2));
         const second = Number(padded.slice(-2));
@@ -3438,10 +3459,11 @@
       return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     }
 
-    function timeObj(minute, second) {
-      if (!Number.isFinite(minute) || !Number.isFinite(second) || second < 0 || second > 59) return null;
-      const total = minute * 60 + second;
-      return { minute, second, total, label: `${minute}:${String(second).padStart(2, "0")}` };
+    function timeObj(minute, second, hundredth = 0) {
+      if (!Number.isFinite(minute) || !Number.isFinite(second) || !Number.isFinite(hundredth) || second < 0 || second > 59 || hundredth < 0 || hundredth > 99) return null;
+      const total = Math.round((minute * 60 + second + hundredth / 100) * 100) / 100;
+      const decimal = hundredth ? `.${String(hundredth).padStart(2, "0")}` : "";
+      return { minute, second, hundredth, total, label: `${minute}:${String(second).padStart(2, "0")}${decimal}` };
     }
 
     function splitCommands(text) {
@@ -3450,7 +3472,7 @@
       const tokens = nameTokens();
       const rawParts = normalized.split(",").filter(Boolean);
       const nameOnlyToken = (part) => tokens.find((item) => part === item.token || part.endsWith(item.token));
-      const startsWithTimeOrAction = (part) => /^([0-9一二三四五六七八九十:：分秒]|出發|回來|到達|抵達|回到)/.test(part);
+      const startsWithTimeOrAction = (part) => /^([0-9一二三四五六七八九十:：分秒]|出發|出去|回來|到達|抵達|回到)/.test(part);
       const rough = [];
       let pendingName = null;
       for (const part of rawParts) {
@@ -3475,8 +3497,8 @@
       for (const part of rough) {
         const matches = [];
         const usedSpans = [];
-        const timePattern = "[0-9一二三四五六七八九十:：分秒]+(?:扣[0-9一二三四五六七八九十兩]+秒?)?";
-        const actionPattern = "出發|回來|到達|抵達|回到";
+        const timePattern = "[0-9一二三四五六七八九十:：分秒.．]+(?:扣[0-9一二三四五六七八九十兩]+秒?)?";
+        const actionPattern = "出發|出去|回來|到達|抵達|回到";
         const addMatch = (start, end, raw, name, timeRaw, actionRaw) => {
           if (usedSpans.some((span) => start < span.end && end > span.start)) return;
           usedSpans.push({ start, end });
@@ -3494,7 +3516,7 @@
             addMatch(tokenMatch.index, tokenMatch.index + tokenMatch[0].length, tokenMatch[0], item.name, timeRaw, actionRaw);
           }
         }
-        const actionMatches = [...part.matchAll(/([0-9一二三四五六七八九十:：分秒]+(?:扣[0-9一二三四五六七八九十兩]+秒?)?)(出發|回來|到達|抵達|回到)?/g)];
+        const actionMatches = [...part.matchAll(/([0-9一二三四五六七八九十:：分秒.．]+(?:扣[0-9一二三四五六七八九十兩]+秒?)?)(出發|出去|回來|到達|抵達|回到)?/g)];
         for (const actionMatch of actionMatches) {
           if (!actionMatch[2] && !actionMatch[1].includes("扣")) continue;
           const beforeTime = part.slice(0, actionMatch.index);
@@ -3503,7 +3525,7 @@
             addMatch(actionMatch.index - nameToken.token.length, actionMatch.index + actionMatch[0].length, `${nameToken.token}${actionMatch[0]}`, nameToken.name, actionMatch[1], actionMatch[2] || "回來");
           }
         }
-        if (!matches.length) matches.push(...part.matchAll(/([\u4e00-\u9fff]{2,4})([0-9一二三四五六七八九十:：分秒]+(?:扣[0-9一二三四五六七八九十兩]+秒?)?)(出發|回來|到達|抵達|回到)?/g));
+        if (!matches.length) matches.push(...part.matchAll(/([\u4e00-\u9fff]{2,4})([0-9一二三四五六七八九十:：分秒.．]+(?:扣[0-9一二三四五六七八九十兩]+秒?)?)(出發|出去|回來|到達|抵達|回到)?/g));
         if (matches.length) {
           matches.sort((a, b) => (a.start ?? a.index ?? 0) - (b.start ?? b.index ?? 0));
           for (const m of matches) {
@@ -3524,7 +3546,7 @@
 
     function normalizeAction(action) {
       if (!action) return "";
-      return action === "出發" ? "出發" : "回來";
+      return action === "出發" || action === "出去" ? "出發" : "回來";
     }
 
     function previewDigits(raw) {
@@ -3552,7 +3574,7 @@
           const current = segments[i];
           const next = segments[i + 1];
           const currentLooksLikeName = current?.normalized && !/\d/.test(current.normalized) && resolveParsedName(current.normalized).method !== "未辨識";
-          const nextLooksLikeTimeAction = /^(\d{1,4}(出發|回來)|(出發|回來)\d{1,4})$/.test(next?.normalized || "");
+          const nextLooksLikeTimeAction = /^(\d{1,5}(出發|出去|回來)|(出發|出去|回來)\d{1,5})$/.test(next?.normalized || "");
           if (currentLooksLikeName && nextLooksLikeTimeAction) {
             merged.push({
               raw: `${current.raw}${next.raw}`,
@@ -3603,13 +3625,13 @@
       const segments = mergeSlowSpeechSegments(originalSegments);
       for (const segment of segments) {
         let matched = false;
-        const re = /(.+?)(?:(\d{1,4})(出發|回來)|(出發|回來)(\d{1,4}))/g;
+        const re = /(.+?)(?:(\d{1,5})(出發|出去|回來)|(出發|出去|回來)(\d{1,5}))/g;
         let match;
         while ((match = re.exec(segment.normalized)) !== null) {
           matched = true;
           const rawName = match[1];
           const timeRaw = match[2] || match[5];
-          const action = match[3] || match[4];
+          const action = normalizeAction(match[3] || match[4]);
           pushItem(match[0], rawName, timeRaw, action, segment.raw);
         }
         if (!matched && segment.normalized) {
@@ -3803,6 +3825,7 @@
       state.issues = parseState.issues.slice();
       state.summaryMetaOverrides = {};
       state.lapItemOverrides = {};
+      state.lapPbOverrides = {};
       for (const item of parseState.items) {
         if (!item.timeRaw || item.timeRaw === "-" || !item.action || item.action === "-") continue;
         const parsedTime = parseTime(item.timeRaw);
@@ -3829,6 +3852,7 @@
       state.issues = [];
       state.summaryMetaOverrides = {};
       state.lapItemOverrides = {};
+      state.lapPbOverrides = {};
       const commands = splitCommands(el("commandBox").value);
       for (const command of commands) {
         if (command.error) {
@@ -4070,9 +4094,11 @@
     function restSecondsForTrip(trips, index) {
       if (index <= 0) return null;
       const currentStart = entryTotal(trips[index]?.start);
+      const previousStart = entryTotal(trips[index - 1]?.start);
       const previousBack = entryTotal(trips[index - 1]?.back);
+      if (currentStart === 0 && previousStart === 0) return null;
       if (!Number.isFinite(currentStart) || !Number.isFinite(previousBack)) return null;
-      return currentStart - previousBack;
+      return Math.round((currentStart - previousBack) * 100) / 100;
     }
 
     function restLabelForTrip(trips, index) {
@@ -4083,8 +4109,13 @@
     function fmt(total) {
       if (total === null || total === undefined || total === "") return "";
       const sign = total < 0 ? "-" : "";
-      const abs = Math.abs(total);
-      return `${sign}${Math.floor(abs / 60)}:${String(abs % 60).padStart(2, "0")}`;
+      const hundredths = Math.round(Math.abs(total) * 100);
+      const minute = Math.floor(hundredths / 6000);
+      const remainder = hundredths - minute * 6000;
+      const wholeSeconds = Math.floor(remainder / 100);
+      const hundredth = remainder % 100;
+      const decimal = hundredth ? `.${String(hundredth).padStart(2, "0")}` : "";
+      return `${sign}${minute}:${String(wholeSeconds).padStart(2, "0")}${decimal}`;
     }
 
     function entryTotal(entry) {
@@ -4149,11 +4180,8 @@
             const personalRanks = personalRankMap(results);
             const intervalDiffs = courseIntervalDiffMap(trips, meta.time?.total);
             const metrics = swimmerMetrics(trips);
-            const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "";
-            const itemPb = getPb(name, meta.item);
-            const courseOptions = activeCoursePlanRows().map((row) =>
-              `<option value="${row.group}"${meta.courseGroup === row.group ? " selected" : ""}>${row.groupLabel}</option>`
-            ).join("");
+            const avg = averageSeconds(valid);
+            const itemPb = effectivePb(name, meta.item);
             const resultCells = Array.from({ length: maxTrips }, (_, i) => {
               const trip = trips[i] || {};
               const result = results[i];
@@ -4193,9 +4221,9 @@
             const avgIntensityLabel = intensityLabel(itemPb?.seconds, avg);
             const avgIntensityPercent = avgIntensityLabel ? Number(avgIntensityLabel.replace("%", "")) : NaN;
             return `<tr>
-              <td>${escapeHtml(sessionGroupLabel())}</td>
-              <td><input class="person-order-input" data-person-order="${escapeHtml(name)}" type="number" min="1" value="${escapeHtml(meta.personOrder)}"></td>
-              <td><select class="course-group-select" data-course-group="${escapeHtml(name)}">${courseOptions}</select></td>
+              <td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("main", "", "", "sessionGroup")'>${escapeHtml(sessionGroupLabel())}</button></td>
+              <td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("main", "", ${JSON.stringify(name)}, "personOrder")'>${escapeHtml(meta.personOrder)}</button></td>
+              <td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("main", "", ${JSON.stringify(name)}, "courseGroup")'>${escapeHtml(courseGroupLetter(meta.courseGroup))}</button></td>
               <td>${escapeHtml(meta.item)}</td>
               <td>${escapeHtml(meta.timeRaw)}</td>
               <td><strong>${escapeHtml(name)}</strong></td>
@@ -4219,23 +4247,6 @@
             }).join("") : `<tr><td colspan="18">尚未整理。把口令貼到左邊後按「整理」。</td></tr>`}
         </tbody>`;
 
-      el("summaryTable").querySelectorAll("[data-person-order]").forEach((input) => {
-        input.addEventListener("change", () => {
-          const name = input.dataset.personOrder;
-          state.summaryMetaOverrides[name] ||= {};
-          state.summaryMetaOverrides[name].personOrder = Number(input.value) || "";
-          maybeAskCourseGroupChange(name);
-          render();
-        });
-      });
-      el("summaryTable").querySelectorAll("[data-course-group]").forEach((select) => {
-        select.addEventListener("change", () => {
-          const name = select.dataset.courseGroup;
-          state.summaryMetaOverrides[name] ||= {};
-          state.summaryMetaOverrides[name].courseGroup = Number(select.value) || 1;
-          render();
-        });
-      });
       const rawRows = state.entries.map((entry, index) => `
         <tr>
           <td>${index + 1}</td>
@@ -4332,28 +4343,6 @@
           snapshot.courseSettings = normalizeCourseSettings(snapshot.courseSettings);
           snapshot.courseSettings.rows[rowIndex] ||= {};
           snapshot.courseSettings.rows[rowIndex].item = select.value;
-          refreshSnapshotSummary(snapshot, Number(select.dataset.snapshotIndex));
-        });
-      });
-      list.querySelectorAll("[data-snapshot-person-order]").forEach((input) => {
-        input.addEventListener("change", () => {
-          const snapshot = snapshots[Number(input.dataset.snapshotIndex)];
-          if (!snapshot) return;
-          const name = input.dataset.snapshotPersonOrder;
-          snapshot.summaryMetaOverrides ||= {};
-          snapshot.summaryMetaOverrides[name] ||= {};
-          snapshot.summaryMetaOverrides[name].personOrder = Number(input.value) || "";
-          refreshSnapshotSummary(snapshot, Number(input.dataset.snapshotIndex));
-        });
-      });
-      list.querySelectorAll("[data-snapshot-course-group]").forEach((select) => {
-        select.addEventListener("change", () => {
-          const snapshot = snapshots[Number(select.dataset.snapshotIndex)];
-          if (!snapshot) return;
-          const name = select.dataset.snapshotCourseGroup;
-          snapshot.summaryMetaOverrides ||= {};
-          snapshot.summaryMetaOverrides[name] ||= {};
-          snapshot.summaryMetaOverrides[name].courseGroup = Number(select.value) || 1;
           refreshSnapshotSummary(snapshot, Number(select.dataset.snapshotIndex));
         });
       });
@@ -4547,22 +4536,22 @@
         ...headers.slice(6),
       ];
       const plan = activeCoursePlanRowsFromSettings(snapshot.courseSettings);
-      const courseOptions = (selected) => plan.map((row) =>
-        `<option value="${row.group}"${String(selected) === row.groupLabel || Number(selected) === row.group ? " selected" : ""}>${row.groupLabel}</option>`
-      ).join("");
       return `
         <div class="table-wrap">
           <table>
             <thead><tr>${enhancedHeaders.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead>
             <tbody>${bodyRows.length ? bodyRows.map((row) => {
               const name = row[5] || "";
-              const itemPb = getPb(name, row[3]);
+              const itemPb = effectivePb(name, row[3], snapshot.lapPbOverrides || {});
               const resultCells = row.map((cell, cellIndex) => {
                 if (cellIndex === 1) {
-                  return `<td><input class="person-order-input" data-snapshot-index="${index}" data-snapshot-person-order="${escapeHtml(name)}" type="number" min="1" value="${escapeHtml(cell)}"></td>`;
+                  return `<td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("snapshot", ${index}, ${JSON.stringify(name)}, "personOrder")'>${escapeHtml(cell)}</button></td>`;
                 }
                 if (cellIndex === 2) {
-                  return `<td><select class="course-group-select" data-snapshot-index="${index}" data-snapshot-course-group="${escapeHtml(name)}">${courseOptions(cell)}</select></td>`;
+                  return `<td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("snapshot", ${index}, ${JSON.stringify(name)}, "courseGroup")'>${escapeHtml(cell)}</button></td>`;
+                }
+                if (cellIndex === 0) {
+                  return `<td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("snapshot", ${index}, "", "sessionGroup")'>${escapeHtml(cell)}</button></td>`;
                 }
                 const isScore = headers[cellIndex]?.includes("趟成績");
                 const isPb = headers[cellIndex] === "PB";
@@ -4575,7 +4564,7 @@
               const intensityCells = tripColumns.map(({ columnIndex }) => {
                 const seconds = parsePbSeconds(String(row[columnIndex] || "").trim().split(/\s+/)[0] || "");
                 const tripIndex = tripColumns.findIndex((tripColumn) => tripColumn.columnIndex === columnIndex);
-                const info = lapIntensityInfo(name, row[3], seconds, tripIndex, snapshot.lapItemOverrides || {});
+                const info = lapIntensityInfo(name, row[3], seconds, tripIndex, snapshot.lapItemOverrides || {}, snapshot.lapPbOverrides || {});
                 const value = intensityCorrectionHtml(info, name, row[3], tripIndex, "snapshot", index);
                 return `<td class="intensity-value ${intensityClass(info.percent)}">${value}</td>`;
               }).join("");
@@ -4727,6 +4716,54 @@
       el("detailDialog").classList.add("show");
     }
 
+    function showSummaryMetaDialog(scope, snapshotIndex, name, field) {
+      const snapshot = scope === "snapshot" ? snapshots[Number(snapshotIndex)] : null;
+      if (scope === "snapshot" && !snapshot) return;
+      const settings = scope === "snapshot" ? normalizeCourseSettings(snapshot.courseSettings) : currentCourseSettings();
+      const overrides = scope === "snapshot" ? (snapshot.summaryMetaOverrides ||= {}) : state.summaryMetaOverrides;
+      const meta = name ? summaryMetaForContext(name, scope === "snapshot" ? snapshot.entries : state.entries, settings, overrides) : null;
+      let title = "";
+      let control = "";
+      if (field === "sessionGroup") {
+        title = "修改第幾組";
+        control = `<label>第幾組<input id="summaryMetaValue" type="text" inputmode="numeric" value="${escapeHtml(settings.sessionGroup || "1")}"></label>`;
+      } else if (field === "personOrder") {
+        title = `${name} 出發序`;
+        control = `<label>出發序<input id="summaryMetaValue" type="text" inputmode="numeric" value="${escapeHtml(meta?.personOrder || "")}"></label>`;
+      } else {
+        title = `${name} 課表組`;
+        const options = activeCoursePlanRowsFromSettings(settings).map((row) =>
+          `<option value="${row.group}"${row.group === meta?.courseGroup ? " selected" : ""}>${row.groupLabel} - ${escapeHtml(row.item || "")}</option>`
+        ).join("");
+        control = `<label>課表組<select id="summaryMetaValue">${options}</select></label>`;
+      }
+      el("detailTitle").textContent = title;
+      el("detailContent").innerHTML = `
+        <div class="intensity-dialog-controls" style="grid-template-columns:1fr;">${control}</div>
+        <button id="confirmSummaryMetaBtn" type="button" style="width:100%;">套用</button>
+      `;
+      el("detailDialog").classList.add("show");
+      el("confirmSummaryMetaBtn").addEventListener("click", () => {
+        const value = String(el("summaryMetaValue")?.value || "").trim();
+        if (field === "sessionGroup") {
+          if (scope === "snapshot") {
+            snapshot.courseSettings.sessionGroup = value || "1";
+            refreshSnapshotSummary(snapshot, Number(snapshotIndex));
+          } else {
+            if (el("sessionGroup")) el("sessionGroup").value = value || "1";
+            render();
+          }
+        } else {
+          overrides[name] ||= {};
+          if (field === "personOrder") overrides[name].personOrder = Number(value) || "";
+          else overrides[name].courseGroup = Number(value) || 1;
+          if (scope === "snapshot") refreshSnapshotSummary(snapshot, Number(snapshotIndex));
+          else render();
+        }
+        el("detailDialog").classList.remove("show");
+      });
+    }
+
     function itemParts(item) {
       const match = String(item || "").trim().match(/^(\d+)(.*)$/);
       return {
@@ -4740,9 +4777,12 @@
       const snapshot = scope === "snapshot" ? snapshots[Number(snapshotIndex)] : null;
       if (scope === "snapshot" && !snapshot) return;
       if (snapshot) snapshot.lapItemOverrides ||= {};
+      if (snapshot) snapshot.lapPbOverrides ||= {};
       const overrides = scope === "snapshot" ? snapshot.lapItemOverrides : state.lapItemOverrides;
+      const pbOverrides = scope === "snapshot" ? snapshot.lapPbOverrides : state.lapPbOverrides;
       const key = lapItemKey(name, tripIndex);
       const currentItem = String(overrides[key] || "").trim() || plannedItem;
+      const currentPb = effectivePb(name, currentItem, pbOverrides);
       const current = itemParts(currentItem);
       const planned = itemParts(plannedItem);
       const distances = new Set(["25", "50", "75", "100", "200", current.distance, planned.distance].filter(Boolean));
@@ -4770,8 +4810,11 @@
           <label>實際泳姿
             <select id="actualLapStroke">${strokeOptions}</select>
           </label>
+          <label style="grid-column:1 / -1;">本次使用 PB（選填）
+            <input id="actualLapPb" type="text" inputmode="decimal" value="${escapeHtml(currentPb?.temporary ? currentPb.pb : "")}" placeholder="${escapeHtml(currentPb?.pb || "例：05883 或 0:58.83")}">
+          </label>
         </div>
-        <p class="small">套用後會改用該項目的 PB 重算這一趟強度；沒有 PB 時會顯示「尚無PB」。</p>
+        <p class="small">正式 PB：${escapeHtml(getPb(name, currentItem)?.pb || "尚無")}。填入的 PB 只作用於本次暫存與報表，不會直接改正式 PB 表。</p>
         <div class="intensity-dialog-actions">
           <button id="restoreLapItemBtn" type="button" class="secondary">依課表恢復</button>
           <button id="confirmLapItemBtn" type="button">套用修正</button>
@@ -4779,13 +4822,22 @@
       `;
       el("detailDialog").classList.add("show");
 
-      const finish = (value) => {
+      const finish = (value, applyPb = true) => {
         setLapItemOverride(overrides, key, value === plannedItem ? "" : value);
+        const pbText = String(el("actualLapPb")?.value || "").trim();
+        if (applyPb && pbText) {
+          const parsedPb = parseTime(pbText)?.total ?? parsePbSeconds(pbText);
+          if (!Number.isFinite(parsedPb)) {
+            setStatus("PB 時間無法判讀，請輸入例如 05883 或 0:58.83。", "bad");
+            return;
+          }
+          pbOverrides[pbOverrideKey(name, value || plannedItem)] = { pb: fmt(parsedPb), seconds: parsedPb };
+        }
         el("detailDialog").classList.remove("show");
         if (scope === "snapshot") refreshSnapshotSummary(snapshot, Number(snapshotIndex));
         else render();
       };
-      el("restoreLapItemBtn").addEventListener("click", () => finish(""));
+      el("restoreLapItemBtn").addEventListener("click", () => finish("", false));
       el("confirmLapItemBtn").addEventListener("click", () => {
         const distance = String(el("actualLapDistance")?.value || "").replace(/[^\d]/g, "");
         const stroke = String(el("actualLapStroke")?.value || "").trim();
@@ -5008,6 +5060,7 @@
       state.issues = [];
       state.summaryMetaOverrides = {};
       state.lapItemOverrides = {};
+      state.lapPbOverrides = {};
       render();
       setStatus("已清空整理結果。");
     });
@@ -5058,6 +5111,7 @@
     el("saveResultBtn")?.addEventListener("click", saveResultToDrive);
     el("snapshotBtn").addEventListener("click", saveCurrentSnapshot);
     el("uploadSnapshotsBtn").addEventListener("click", uploadSnapshotsToDrive);
+    el("loadSnapshotsBtn").addEventListener("click", loadSnapshotsFromDrive);
     el("uploadSummaryBtn").addEventListener("click", uploadSnapshotSummaryToDrive);
     el("coachExcelBtn").addEventListener("click", downloadCoachExcel);
     el("uploadHistoryBtn").addEventListener("click", uploadHistoryData);
@@ -5100,6 +5154,7 @@
         courseSettings,
         summaryMetaOverrides: JSON.parse(JSON.stringify(state.summaryMetaOverrides || {})),
         lapItemOverrides: JSON.parse(JSON.stringify(state.lapItemOverrides || {})),
+        lapPbOverrides: JSON.parse(JSON.stringify(state.lapPbOverrides || {})),
         summaryTableRows: currentSummaryTableRows(state.entries, {
           courseSettings,
           summaryMetaOverrides: state.summaryMetaOverrides || {},
@@ -5119,6 +5174,7 @@
       state.issues = [];
       state.summaryMetaOverrides = {};
       state.lapItemOverrides = {};
+      state.lapPbOverrides = {};
       el("commandBox").value = "";
       const charCount = el("charCount");
       if (charCount) charCount.textContent = "0 / 300";
@@ -5174,7 +5230,7 @@
           fmt(metrics.pb),
           metrics.bestTrip,
           metrics.improvement === "" ? "" : metrics.improvement,
-          fmt(valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "")
+          fmt(averageSeconds(valid))
         );
         rows.push(row);
       }
@@ -5196,7 +5252,7 @@
         });
         const valid = results.filter((value) => value !== null);
         const metrics = swimmerMetrics(trips);
-        const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "";
+        const avg = averageSeconds(valid);
         return { name, trips, results, valid, metrics, avg };
       });
     }
@@ -5257,7 +5313,7 @@
         const personalRanks = personalRankMap(results);
         const intervalDiffs = courseIntervalDiffMap(trips, meta.time?.total);
         const metrics = swimmerMetrics(trips);
-        const avg = valid.length ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length) : "";
+        const avg = averageSeconds(valid);
         const row = [
           `第${settings.sessionGroup || 1}組`,
           meta.personOrder,
@@ -5420,7 +5476,7 @@
             : backTotal - (trip.back.deductSeconds || 0);
           if (!Number.isFinite(resultSeconds) || resultSeconds < 0) return;
           const actualItem = actualLapItem(name, meta.item, index, snapshot.lapItemOverrides || {});
-          const itemPb = getPb(name, actualItem);
+          const itemPb = effectivePb(name, actualItem, snapshot.lapPbOverrides || {});
           const intensity = itemPb?.seconds
             ? Math.round((itemPb.seconds / resultSeconds) * 10000) / 100
             : "";
@@ -5563,8 +5619,8 @@
           const personalRanks = personalRankMap(results);
           const intervalDiffs = courseIntervalDiffMap(trips, meta.time?.total);
           const metrics = swimmerMetrics(trips);
-          const avg = Math.round(valid.reduce((sum, value) => sum + value, 0) / valid.length);
-          const itemPb = getPb(name, meta.item);
+          const avg = averageSeconds(valid);
+          const itemPb = effectivePb(name, meta.item, snapshot.lapPbOverrides || {});
           const scoreCells = results.slice(0, lastTrip).map((result, index) => {
             if (result === null) return ["", "", "", ""];
             if (result < 0) return ["回來早於出發", "", "", ""];
@@ -5574,7 +5630,7 @@
             return [fmt(result), rank ? `#${rank}` : "", restLabelForTrip(trips, index), cycleLabel];
           });
           const intensityCells = results.slice(0, lastTrip).map((result, index) => {
-            const info = lapIntensityInfo(name, meta.item, result, index, snapshot.lapItemOverrides || {});
+            const info = lapIntensityInfo(name, meta.item, result, index, snapshot.lapItemOverrides || {}, snapshot.lapPbOverrides || {});
             const prefix = info.selectedItem ? `${info.actualItem} ` : "";
             return info.label ? `${prefix}${info.label}` : (info.selectedItem ? `${info.actualItem} 尚無PB` : "");
           });
@@ -5707,6 +5763,7 @@
             action: "saveBackupBlocks",
             date,
             blocks,
+            snapshots: snapshots.filter((snapshot) => (snapshot.date || fallbackDate) === date),
           });
           if (!result || !result.ok) throw new Error("save failed");
         }
@@ -5723,6 +5780,52 @@
             uploadBtn.classList.remove("is-loading");
             uploadBtn.textContent = originalText;
           }, resetDelay);
+        }
+      }
+    }
+
+    async function loadSnapshotsFromDrive() {
+      const button = el("loadSnapshotsBtn");
+      const originalText = button?.textContent || "載入備份";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "載入中...";
+      }
+      setStatus("正在讀取雲端備份...", "good");
+      try {
+        const result = await sheetAction({ action: "getBackupSnapshots" });
+        const cloudSnapshots = Array.isArray(result?.snapshots) ? result.snapshots.map(normalizeSnapshot) : [];
+        if (!cloudSnapshots.length) {
+          setStatus("雲端尚無可載回的暫存備份。", "bad");
+          return;
+        }
+        el("detailTitle").textContent = "載入雲端備份";
+        el("detailContent").innerHTML = `
+          <p class="small">選擇一組載回暫存紀錄；相同備份會更新本機現有資料。</p>
+          <div class="load-backup-list">
+            ${cloudSnapshots.map((snapshot, index) => `<button type="button" class="secondary" data-load-cloud-snapshot="${index}" style="width:100%;margin:5px 0;">${escapeHtml(snapshot.date)}　${escapeHtml(snapshotLabel(snapshot, index))}</button>`).join("")}
+          </div>
+        `;
+        el("detailDialog").classList.add("show");
+        el("detailContent").querySelectorAll("[data-load-cloud-snapshot]").forEach((loadButton) => {
+          loadButton.addEventListener("click", () => {
+            const selected = cloudSnapshots[Number(loadButton.dataset.loadCloudSnapshot)];
+            const existingIndex = snapshots.findIndex((snapshot) => snapshot.recordId === selected.recordId);
+            if (existingIndex >= 0) snapshots[existingIndex] = selected;
+            else snapshots.push(selected);
+            saveSnapshotsLocal();
+            renderSnapshotList(existingIndex >= 0 ? existingIndex : snapshots.length - 1);
+            el("detailDialog").classList.remove("show");
+            setStatus(`已載入備份：${selected.date} ${selected.title}。`, "good");
+          });
+        });
+        setStatus(`已找到 ${cloudSnapshots.length} 組雲端備份，請選擇載入。`, "good");
+      } catch {
+        setStatus("載入備份失敗：請先部署最新版 Apps Script。", "bad");
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText;
         }
       }
     }
