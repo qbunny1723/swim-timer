@@ -4127,6 +4127,10 @@
       };
     }
 
+    function workoutSummaryLabel(item, timeRaw) {
+      return [item, timeRaw].filter((value) => String(value || "").trim()).join(" / ");
+    }
+
     function checkCourseIntervals() {
       const plan = mixPlanRows();
       if (!plan.some((row) => row.time)) return;
@@ -4281,10 +4285,10 @@
       el("summaryTable").innerHTML = `
         <thead>
           <tr>
-            <th>組</th><th>出發序</th><th>課表組</th><th>課表內容</th><th>含休</th>
-            <th>姓名</th><th>項目PB</th>
-            ${Array.from({ length: maxTrips }, (_, i) => `<th>第${i + 1}趟成績</th>`).join("")}
-            <th>完成</th><th>PB</th><th>PB趟次</th><th>首末差</th><th>平均</th>
+            <th>組</th><th>序</th><th>課表</th><th>內容/含休</th>
+            <th>姓名</th><th>PB參考</th>
+            ${Array.from({ length: maxTrips }, (_, i) => `<th>第${i + 1}趟</th>`).join("")}
+            <th>完成</th><th>最佳</th><th>趟次</th><th>差</th><th>平均</th>
           </tr>
         </thead>
         <tbody>
@@ -4346,8 +4350,7 @@
               <td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("main", "", "", "sessionGroup")'>${escapeHtml(sessionGroupLabel())}</button></td>
               <td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("main", "", ${JSON.stringify(name)}, "personOrder")'>${escapeHtml(meta.personOrder)}</button></td>
               <td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("main", "", ${JSON.stringify(name)}, "courseGroup")'>${escapeHtml(courseGroupLetter(meta.courseGroup))}</button></td>
-              <td>${escapeHtml(meta.item)}</td>
-              <td>${escapeHtml(meta.timeRaw)}</td>
+              <td>${escapeHtml(workoutSummaryLabel(meta.item, meta.timeRaw))}</td>
               <td><strong>${escapeHtml(name)}</strong></td>
               <td class="result">${escapeHtml(itemPb?.pb || "")}</td>
               ${resultCells}
@@ -4358,7 +4361,7 @@
               <td>${fmt(avg)}</td>
             </tr>
             <tr class="intensity-row">
-              <td colspan="6"></td>
+              <td colspan="5"></td>
               <td class="intensity-label">${itemPb ? "強度" : ""}</td>
               ${intensityCells}
               <td></td>
@@ -4366,7 +4369,7 @@
               <td colspan="2"></td>
               <td class="intensity-value ${intensityClass(avgIntensityPercent)}">${avgIntensityLabel}</td>
             </tr>`;
-            }).join("") : `<tr><td colspan="18">尚未整理。把口令貼到左邊後按「整理」。</td></tr>`}
+            }).join("") : `<tr><td colspan="${maxTrips + 11}">尚未整理。把口令貼到左邊後按「整理」。</td></tr>`}
         </tbody>`;
 
       const rawRows = state.entries.map((entry, index) => `
@@ -4668,11 +4671,11 @@
       const [headers, ...bodyRows] = rows;
       const tripColumns = headers
         .map((header, columnIndex) => ({ header, columnIndex }))
-        .filter(({ header }) => String(header || "").includes("趟成績"));
+        .filter(({ header }) => /^第\d+趟$/.test(String(header || "")));
       const enhancedHeaders = [
-        ...headers.slice(0, 6),
-        "項目PB",
-        ...headers.slice(6),
+        ...headers.slice(0, 5),
+        "PB參考",
+        ...headers.slice(5),
       ];
       const plan = activeCoursePlanRowsFromSettings(snapshot.courseSettings);
       return `
@@ -4680,8 +4683,9 @@
           <table>
             <thead><tr>${enhancedHeaders.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead>
             <tbody>${bodyRows.length ? bodyRows.map((row) => {
-              const name = row[5] || "";
-              const itemPb = effectivePb(name, row[3], snapshot.lapPbOverrides || {});
+              const name = row[4] || "";
+              const meta = summaryMetaForContext(name, snapshot.entries || [], normalizeCourseSettings(snapshot.courseSettings), snapshot.summaryMetaOverrides || {});
+              const itemPb = effectivePb(name, meta.item, snapshot.lapPbOverrides || {});
               const resultCells = row.map((cell, cellIndex) => {
                 if (cellIndex === 1) {
                   return `<td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("snapshot", ${index}, ${JSON.stringify(name)}, "personOrder")'>${escapeHtml(cell)}</button></td>`;
@@ -4692,22 +4696,22 @@
                 if (cellIndex === 0) {
                   return `<td><button type="button" class="table-edit-btn" onclick='showSummaryMetaDialog("snapshot", ${index}, "", "sessionGroup")'>${escapeHtml(cell)}</button></td>`;
                 }
-                const isScore = headers[cellIndex]?.includes("趟成績");
-                const isPb = headers[cellIndex] === "PB";
-                const isProgress = headers[cellIndex] === "首末差" || headers[cellIndex] === "進步";
+                const isScore = /^第\d+趟$/.test(headers[cellIndex] || "");
+                const isPb = headers[cellIndex] === "最佳";
+                const isProgress = headers[cellIndex] === "差" || headers[cellIndex] === "進步";
                 const className = isScore || isPb ? "result" : isProgress ? (String(cell).startsWith("+") ? "metric-good" : "metric-muted") : "";
                 const content = isScore ? formatSnapshotScoreCell(cell) : escapeHtml(cell);
                 return `<td${className ? ` class="${className}"` : ""}>${content}</td>`;
               });
-              resultCells.splice(6, 0, `<td class="result">${escapeHtml(itemPb?.pb || "")}</td>`);
+              resultCells.splice(5, 0, `<td class="result">${escapeHtml(itemPb?.pb || "")}</td>`);
               const intensityCells = tripColumns.map(({ columnIndex }) => {
                 const seconds = parsePbSeconds(String(row[columnIndex] || "").trim().split(/\s+/)[0] || "");
                 const tripIndex = tripColumns.findIndex((tripColumn) => tripColumn.columnIndex === columnIndex);
-                const info = lapIntensityInfo(name, row[3], seconds, tripIndex, snapshot.lapItemOverrides || {}, snapshot.lapPbOverrides || {});
-                const value = intensityCorrectionHtml(info, name, row[3], tripIndex, "snapshot", index);
+                const info = lapIntensityInfo(name, meta.item, seconds, tripIndex, snapshot.lapItemOverrides || {}, snapshot.lapPbOverrides || {});
+                const value = intensityCorrectionHtml(info, name, meta.item, tripIndex, "snapshot", index);
                 return `<td class="intensity-value ${intensityClass(info.percent)}">${value}</td>`;
               }).join("");
-              const pbIndex = headers.indexOf("PB");
+              const pbIndex = headers.indexOf("最佳");
               const avgIndex = headers.indexOf("平均");
               const pbIntensityLabel = intensityLabel(itemPb?.seconds, parsePbSeconds(row[pbIndex]));
               const pbIntensityPercent = pbIntensityLabel ? Number(pbIntensityLabel.replace("%", "")) : NaN;
@@ -4715,7 +4719,7 @@
               const avgIntensityPercent = avgIntensityLabel ? Number(avgIntensityLabel.replace("%", "")) : NaN;
               return `<tr>${resultCells.join("")}</tr>
                 <tr class="intensity-row">
-                  <td colspan="6"></td>
+                  <td colspan="5"></td>
                   <td class="intensity-label">${itemPb ? "強度" : ""}</td>
                   ${intensityCells}
                   <td></td>
@@ -5434,9 +5438,9 @@
         });
         return last;
       }));
-      const headers = ["組", "出發序", "課表組", "課表內容", "含休", "姓名"];
-      for (let i = 1; i <= visibleTrips; i++) headers.push(`第${i}趟成績`);
-      headers.push("完成", "PB", "PB趟次", "首末差", "平均");
+      const headers = ["組", "序", "課表", "內容/含休", "姓名"];
+      for (let i = 1; i <= visibleTrips; i++) headers.push(`第${i}趟`);
+      headers.push("完成", "最佳", "趟次", "差", "平均");
       const rows = [headers];
       grouped(entries).forEach(({ name, trips }) => {
         const meta = summaryMetaForContext(name, entries, settings, overrides);
@@ -5457,8 +5461,7 @@
           `第${settings.sessionGroup || 1}組`,
           meta.personOrder,
           courseGroupLetter(meta.courseGroup),
-          meta.item,
-          meta.timeRaw,
+          workoutSummaryLabel(meta.item, meta.timeRaw),
           name,
         ];
         results.slice(0, visibleTrips).forEach((result, index) => {
@@ -5553,7 +5556,7 @@
       const summaryRows = snapshotSummaryOnlyRows(snapshot);
       if (summaryRows.length <= 1) return [];
       const [headers, ...bodyRows] = summaryRows;
-      const courseGroupIndex = headers.indexOf("課表組");
+      const courseGroupIndex = headers.indexOf("課表");
       if (courseGroupIndex < 0) return [];
       const plan = activeCoursePlanRowsFromSettings(settings);
       const planByLabel = new Map(plan.map((row) => [row.groupLabel, row]));
@@ -5677,24 +5680,24 @@
     }
 
     function normalizedDailySectionRows(section) {
-      const baseHeaders = ["組", "出發序", "課表組", "課表內容", "含休", "姓名"];
-      const metricHeaders = ["完成", "PB", "PB趟次", "首末差", "平均"];
+      const baseHeaders = ["組", "序", "課表", "內容/含休", "姓名"];
+      const metricHeaders = ["完成", "最佳", "趟次", "差", "平均"];
       const maxTrips = Math.max(0, ...section.records.map((record) => record.tripCount));
       const headers = [
         ...baseHeaders,
-        ...Array.from({ length: maxTrips }, (_, index) => `第${index + 1}趟成績`),
+        ...Array.from({ length: maxTrips }, (_, index) => `第${index + 1}趟`),
         ...metricHeaders,
       ];
       const sortedRecords = section.records.slice().sort((a, b) => {
-        const groupDiff = courseGroupOrder(a.map["課表組"]) - courseGroupOrder(b.map["課表組"]);
+        const groupDiff = courseGroupOrder(a.map["課表"]) - courseGroupOrder(b.map["課表"]);
         if (groupDiff) return groupDiff;
-        const orderDiff = (Number(a.map["出發序"]) || 999) - (Number(b.map["出發序"]) || 999);
+        const orderDiff = (Number(a.map["序"]) || 999) - (Number(b.map["序"]) || 999);
         if (orderDiff) return orderDiff;
         return String(a.map["姓名"] || "").localeCompare(String(b.map["姓名"] || ""), "zh-Hant");
       });
       const bodyRows = sortedRecords.map((record) => [
         ...baseHeaders.map((header) => record.map[header] || ""),
-        ...Array.from({ length: maxTrips }, (_, index) => record.map[`第${index + 1}趟成績`] || ""),
+        ...Array.from({ length: maxTrips }, (_, index) => record.map[`第${index + 1}趟`] || ""),
         ...metricHeaders.map((header) => record.map[header] || ""),
       ]);
       return [
@@ -5712,7 +5715,7 @@
         const summaryRows = snapshotSummaryOnlyRows(snapshot);
         if (summaryRows.length <= 1) continue;
         const [headers, ...bodyRows] = summaryRows;
-        const tripCount = headers.filter((header) => /^第\d+趟成績$/.test(String(header))).length;
+        const tripCount = headers.filter((header) => /^第\d+趟$/.test(String(header))).length;
         const date = snapshot.date || fallbackDate;
         bodyRows.forEach((row) => {
           if (!Array.isArray(row) || !row.some((cell) => String(cell || "").trim())) return;
@@ -5801,8 +5804,8 @@
           return sessionNumber(a.session) - sessionNumber(b.session);
         })
         .flatMap((section) => {
-          const baseHeaders = ["組", "出發序", "課表組", "課表內容", "當趟含休", "姓名", "項目PB"];
-          const metricHeaders = ["完成", "PB", "PB趟次", "首末差", "平均"];
+          const baseHeaders = ["組", "序", "課表", "內容/含休", "姓名", "PB參考"];
+          const metricHeaders = ["完成", "最佳", "趟次", "差", "平均"];
           const maxTrips = Math.max(0, ...section.records.map((record) => record.tripCount));
           const records = section.records.slice().sort((a, b) => {
             const groupDiff = courseGroupOrder(a.groupLabel) - courseGroupOrder(b.groupLabel);
@@ -5815,7 +5818,7 @@
             [section.date, section.session],
             [
               ...baseHeaders,
-              ...Array.from({ length: maxTrips }, (_, index) => [`第${index + 1}趟成績`, "", "", ""]).flat(),
+              ...Array.from({ length: maxTrips }, (_, index) => [`第${index + 1}趟`, "", "", ""]).flat(),
               ...metricHeaders,
             ],
             [
@@ -5828,11 +5831,11 @@
             const scores = Array.from({ length: maxTrips }, (_, index) => record.scoreCells[index] || ["", "", "", ""]).flat();
             const strengths = Array.from({ length: maxTrips }, (_, index) => [record.intensityCells[index] || "", "", "", ""]).flat();
             rows.push([
-              record.session, record.personOrder, record.groupLabel, record.item, record.timeRaw, record.name, record.itemPb,
+              record.session, record.personOrder, record.groupLabel, workoutSummaryLabel(record.item, record.timeRaw), record.name, record.itemPb,
               ...scores, record.completed, record.pb, record.pbTrip, record.difference, record.average,
             ]);
             rows.push([
-              "", "", "", "", "", "強度", "",
+              "", "", "", "", "強度", "",
               ...strengths, "", record.pbIntensity, "", "", record.averageIntensity,
             ]);
           });
