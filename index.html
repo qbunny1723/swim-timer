@@ -1643,6 +1643,12 @@
       border: 1px solid rgba(10, 111, 104, .32);
     }
 
+    .rest-value .rest-badge,
+    .rest-value .cycle-diff-badge {
+      margin-left: 0;
+      margin-right: 4px;
+    }
+
     /* See detail button uses theme color */
     .see-detail-btn {
       background: transparent !important;
@@ -4393,7 +4399,13 @@
               const restLabel = restLabelForTrip(trips, i);
               const cycleDiff = intervalDiffs.get(i);
               const cycleDiffLabel = Number.isFinite(cycleDiff) ? `${cycleDiff > 0 ? "+" : ""}${cycleDiff}秒` : "";
-              return `<td class="rest-value">${[restLabel, cycleDiffLabel].filter(Boolean).map(escapeHtml).join(" ")}</td>`;
+              const cycleDiffClass = cycleDiff > 0 ? "cycle-diff-plus" : "cycle-diff-minus";
+              return `<td class="rest-value">${
+                [
+                  restLabel ? `<span class="rest-badge">${escapeHtml(restLabel)}</span>` : "",
+                  cycleDiffLabel ? `<span class="cycle-diff-badge ${cycleDiffClass}">${escapeHtml(cycleDiffLabel)}</span>` : "",
+                ].filter(Boolean).join("")
+              }</td>`;
             }).join("");
             const intensityCells = Array.from({ length: maxTrips }, (_, i) => {
               const result = results[i];
@@ -4826,7 +4838,12 @@
       if (!text) return "";
       const restMatch = text.match(/休-?\d+秒/);
       const diffMatch = text.match(/([+-]\d+秒)/);
-      return [restMatch?.[0], diffMatch?.[1]].filter(Boolean).map(escapeHtml).join(" ");
+      const diffValue = diffMatch ? Number(diffMatch[1].replace("秒", "")) : null;
+      const diffClass = Number.isFinite(diffValue) ? (diffValue > 0 ? "cycle-diff-plus" : "cycle-diff-minus") : "";
+      return [
+        restMatch ? `<span class="rest-badge">${escapeHtml(restMatch[0])}</span>` : "",
+        diffMatch ? `<span class="cycle-diff-badge ${diffClass}">${escapeHtml(diffMatch[1])}</span>` : "",
+      ].filter(Boolean).join("");
     }
 
     function refreshSnapshotSummary(snapshot, index) {
