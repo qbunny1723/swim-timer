@@ -6099,9 +6099,10 @@
           });
         };
         const showSummaries = async (date) => {
-          el("detailTitle").textContent = `${date} 備份`;
-          el("detailContent").innerHTML = `<p class="small">正在讀取 ${escapeHtml(date)} 的備份清單...</p>`;
-          setStatus(`正在讀取 ${date} 的備份清單...`, "good");
+          const displayDate = compactDisplayDate(date);
+          el("detailTitle").textContent = `${displayDate} 備份`;
+          el("detailContent").innerHTML = `<p class="small">正在讀取 ${escapeHtml(displayDate)} 的備份清單...</p>`;
+          setStatus(`正在讀取 ${displayDate} 的備份清單...`, "good");
           const summaryResult = await sheetAction({ action: "getBackupSummaries", date });
           if (!summaryResult?.ok || !Array.isArray(summaryResult.summaries)) throw new Error("unsupported backup summary api");
           const summaries = summaryResult.summaries;
@@ -6111,7 +6112,7 @@
               <div class="load-backup-list"><button type="button" class="secondary" data-backup-back>回日期列表</button></div>
             `;
             el("detailContent").querySelector("[data-backup-back]")?.addEventListener("click", showDates);
-            setStatus(`${date} 沒有可載入的備份。`, "bad");
+            setStatus(`${displayDate} 沒有可載入的備份。`, "bad");
             return;
           }
           el("detailContent").innerHTML = `
@@ -6145,7 +6146,7 @@
                 saveSnapshotsLocal();
                 renderSnapshotList(existingIndex >= 0 ? existingIndex : snapshots.length - 1);
                 el("detailDialog").classList.remove("show");
-                setStatus(`已載入備份：${selected.date} ${selected.title}。`, "good");
+                setStatus(`已載入備份：${compactDisplayDate(selected.date)} ${selected.title}。`, "good");
               } catch {
                 loadButton.disabled = false;
                 loadButton.innerHTML = originalLoadText;
@@ -6153,7 +6154,7 @@
               }
             });
           });
-          setStatus(`已找到 ${summaries.length} 筆 ${date} 備份，請選擇載入。`, "good");
+          setStatus(`已找到 ${summaries.length} 筆 ${displayDate} 備份，請選擇載入。`, "good");
         };
         showDates();
         el("detailDialog").classList.add("show");
