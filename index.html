@@ -364,7 +364,8 @@
     .floating-settings { order: 2; grid-column: 1; }
     .summary-section { order: 5; grid-column: 2; grid-row: 1 / span 4; }
     .snapshot-section { order: 6; grid-column: 1 / -1; }
-    .raw-section { order: 7; grid-column: 1 / -1; }
+    .pb-section { order: 7; grid-column: 1 / -1; }
+    .raw-section { order: 8; grid-column: 1 / -1; }
 
     section {
       background: var(--panel);
@@ -740,6 +741,36 @@
     .table-wrap {
       overflow: auto;
       max-height: calc(100vh - 118px);
+    }
+
+    .pb-manager-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      align-items: end;
+      margin-bottom: 12px;
+    }
+
+    .pb-manager-grid label {
+      display: grid;
+      gap: 5px;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .pb-manager-grid input,
+    .pb-manager-grid select {
+      min-width: 0;
+    }
+
+    .pb-manager-grid button {
+      min-height: 43px;
+    }
+
+    .pb-manager-status {
+      color: var(--muted);
+      font-weight: 800;
+      margin: 8px 0 10px;
     }
 
     table {
@@ -2158,6 +2189,7 @@
       .input-section,
       .floating-settings,
       .snapshot-section,
+      .pb-section,
       .summary-section,
       .raw-section {
         grid-column: auto;
@@ -2203,6 +2235,8 @@
       .floating-settings { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
       .floating-panel summary { min-height: 40px; font-size: 12px; padding: 0 4px; }
       .floating-panel[open] { grid-column: 1 / -1; }
+      .pb-manager-grid { grid-template-columns: 1fr 1fr; }
+      .pb-manager-grid button { grid-column: 1 / -1; }
       main {
         width: 100vw;
         max-width: 100vw;
@@ -2440,6 +2474,38 @@
       </div>
     </section>
 
+    <section class="pb-section">
+      <div class="section-title">
+        PB管理
+        <span class="pb-badge">課前手動修改會立即套用</span>
+      </div>
+      <div class="body">
+        <div class="pb-manager-grid">
+          <label>學生
+            <select id="pbStudentSelect"></select>
+          </label>
+          <label>項目
+            <select id="pbItemSelect"></select>
+          </label>
+          <label>新PB
+            <input id="pbValueInput" type="text" inputmode="decimal" placeholder="例：0:58.83">
+          </label>
+          <label>生效日期
+            <input id="pbEffectiveDate" type="date">
+          </label>
+          <button id="savePbBtn" type="button">儲存PB</button>
+        </div>
+        <div id="pbManagerStatus" class="pb-manager-status">PB 尚未載入。</div>
+        <div class="table-wrap" style="margin-bottom:14px;">
+          <table id="pbDataTable"></table>
+        </div>
+        <div class="section-title" style="margin:0 -14px 0;">PB更新紀錄</div>
+        <div class="table-wrap">
+          <table id="pbHistoryTable"></table>
+        </div>
+      </div>
+    </section>
+
     <section class="raw-section" style="grid-column:1 / -1;">
       <div class="section-title">原始紀錄與提醒</div>
       <div class="table-wrap raw-table">
@@ -2470,7 +2536,7 @@
     const COURSE_GROUPS = ["A", "B", "C", "D", "E"];
     const state = { entries: [], issues: [], summaryMetaOverrides: {}, lapItemOverrides: {}, lapPbOverrides: {} };
     const parseState = { source: "", items: [], issues: [] };
-    const pbState = { headers: [], rows: [], byNameItem: new Map(), studentCount: 0, loadedAt: "" };
+    const pbState = { headers: [], rows: [], historyHeaders: [], historyRows: [], byNameItem: new Map(), studentCount: 0, loadedAt: "" };
     let snapshots = [];
     let recognition = null;
     let listening = false;
@@ -3043,9 +3109,10 @@
       const nameIndex = data.headers.indexOf("姓名");
       if (nameIndex < 0) return false;
       const groupIndex = data.headers.indexOf("分組");
+      const studentIdIndex = data.headers.indexOf("student_id");
       const itemIndexes = data.headers
         .map((header, index) => ({ header: normalizePbItem(header), index }))
-        .filter(({ header, index }) => header && index !== nameIndex && index !== groupIndex);
+        .filter(({ header, index }) => header && index !== nameIndex && index !== groupIndex && index !== studentIdIndex);
       const byNameItem = new Map();
       const studentNames = new Set();
       data.rows.forEach((row) => {
@@ -3061,6 +3128,8 @@
       });
       pbState.headers = data.headers.slice();
       pbState.rows = data.rows.map((row) => row.slice());
+      pbState.historyHeaders = Array.isArray(data.historyHeaders) ? data.historyHeaders.slice() : [];
+      pbState.historyRows = Array.isArray(data.historyRows) ? data.historyRows.map((row) => row.slice()) : [];
       pbState.byNameItem = byNameItem;
       pbState.studentCount = studentNames.size;
       pbState.loadedAt = data.updatedAt || new Date().toISOString();
@@ -3072,6 +3141,100 @@
 
     function getPb(name, item) {
       return pbState.byNameItem.get(`${String(name || "").trim()}|||${normalizePbItem(item)}`) || null;
+    }
+
+    function pbItemHeaders() {
+      return pbState.headers
+        .filter((header) => !["分組", "student_id", "姓名"].includes(String(header || "").trim()))
+        .filter(Boolean);
+    }
+
+    function renderSimpleTable(tableId, headers, rows, limit = Infinity) {
+      const table = el(tableId);
+      if (!table) return;
+      const visibleRows = rows.slice(0, limit);
+      table.innerHTML = `
+        <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
+        <tbody>
+          ${visibleRows.map((row) => `
+            <tr>${headers.map((_, index) => `<td>${escapeHtml(row[index] || "")}</td>`).join("")}</tr>
+          `).join("")}
+        </tbody>
+      `;
+    }
+
+    function renderPbManager() {
+      const studentSelect = el("pbStudentSelect");
+      const itemSelect = el("pbItemSelect");
+      const status = el("pbManagerStatus");
+      if (!studentSelect || !itemSelect) return;
+      const nameIndex = pbState.headers.indexOf("姓名");
+      const groupIndex = pbState.headers.indexOf("分組");
+      const idIndex = pbState.headers.indexOf("student_id");
+      const currentStudent = studentSelect.value;
+      const currentItem = itemSelect.value;
+      const students = pbState.rows
+        .map((row) => ({
+          name: String(row[nameIndex] || "").trim(),
+          group: groupIndex >= 0 ? String(row[groupIndex] || "").trim() : "",
+          id: idIndex >= 0 ? String(row[idIndex] || "").trim() : "",
+        }))
+        .filter((item) => item.name);
+      studentSelect.innerHTML = students.map((student) => `
+        <option value="${escapeHtml(student.name)}" data-student-id="${escapeHtml(student.id)}">${escapeHtml([student.group, student.name].filter(Boolean).join(" "))}</option>
+      `).join("");
+      const items = pbItemHeaders();
+      itemSelect.innerHTML = items.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`).join("");
+      if (currentStudent && students.some((student) => student.name === currentStudent)) studentSelect.value = currentStudent;
+      if (currentItem && items.includes(currentItem)) itemSelect.value = currentItem;
+      if (el("pbEffectiveDate") && !el("pbEffectiveDate").value) el("pbEffectiveDate").value = currentResultDate();
+      const selectedPb = getPb(studentSelect.value, itemSelect.value);
+      if (el("pbValueInput") && selectedPb && !el("pbValueInput").value) el("pbValueInput").placeholder = selectedPb.pb;
+      if (status) status.textContent = pbState.studentCount
+        ? `已載入 ${pbState.studentCount} 位學生 PB。手動修改會立即更新 PB資料，並寫入 PB更新紀錄。`
+        : "PB 尚未載入。";
+      renderSimpleTable("pbDataTable", pbState.headers, pbState.rows);
+      const historyRows = pbState.historyRows.slice().reverse();
+      renderSimpleTable("pbHistoryTable", pbState.historyHeaders, historyRows, 30);
+    }
+
+    async function saveManualPb() {
+      const studentSelect = el("pbStudentSelect");
+      const itemSelect = el("pbItemSelect");
+      const pbInput = el("pbValueInput");
+      const name = studentSelect?.value || "";
+      const item = itemSelect?.value || "";
+      const pbText = String(pbInput?.value || "").trim();
+      const parsed = parseTime(pbText)?.total ?? parsePbSeconds(pbText);
+      if (!name || !item || !Number.isFinite(parsed) || parsed <= 0) {
+        setStatus("請選學生、項目，並輸入可判讀的 PB，例如 0:58.83。", "bad");
+        return;
+      }
+      const option = studentSelect.selectedOptions?.[0];
+      const studentId = option?.dataset?.studentId || "";
+      const effectiveDate = el("pbEffectiveDate")?.value || currentResultDate();
+      setStatus("正在儲存 PB...", "good");
+      try {
+        const result = await sheetAction({
+          action: "savePbRecord",
+          source: "manual",
+          applyToPbTable: true,
+          name,
+          studentId,
+          item,
+          newPbSeconds: parsed,
+          newPbLabel: fmt(parsed),
+          effectiveDate,
+          note: "教練手動修改",
+        });
+        if (!result?.ok || !applyPbData(result.data, true)) throw new Error("save-pb-failed");
+        if (pbInput) pbInput.value = "";
+        renderPbManager();
+        redrawPbDependentViews();
+        setStatus(`已更新 PB：${name} ${item} ${fmt(parsed)}。`, "good");
+      } catch {
+        setStatus("PB 儲存失敗：請確認 Apps Script 已部署最新版。", "bad");
+      }
     }
 
     function intensityClass(percent) {
@@ -3168,10 +3331,12 @@
       try {
         const result = await sheetAction({ action: "getPbData" });
         if (!result?.ok || !applyPbData(result.data, true)) throw new Error("invalid-pb-data");
+        renderPbManager();
         redrawPbDependentViews();
         setStatus(`已載入 PB：${pbState.studentCount} 位學生。`, "good");
       } catch {
         if (usedLocal) {
+          renderPbManager();
           redrawPbDependentViews();
           setStatus(`已使用這台裝置的 PB 快取：${pbState.studentCount} 位學生。`, "good");
         }
@@ -6767,6 +6932,16 @@
     loadLanePlanLocal();
     loadSnapshotsLocal();
     if (el("resultDate") && !el("resultDate").value) el("resultDate").value = new Date().toISOString().slice(0, 10);
+    if (el("pbEffectiveDate") && !el("pbEffectiveDate").value) el("pbEffectiveDate").value = el("resultDate")?.value || new Date().toISOString().slice(0, 10);
+    el("savePbBtn")?.addEventListener("click", saveManualPb);
+    el("pbStudentSelect")?.addEventListener("change", () => {
+      const selectedPb = getPb(el("pbStudentSelect")?.value, el("pbItemSelect")?.value);
+      if (el("pbValueInput")) el("pbValueInput").placeholder = selectedPb?.pb || "例：0:58.83";
+    });
+    el("pbItemSelect")?.addEventListener("change", () => {
+      const selectedPb = getPb(el("pbStudentSelect")?.value, el("pbItemSelect")?.value);
+      if (el("pbValueInput")) el("pbValueInput").placeholder = selectedPb?.pb || "例：0:58.83";
+    });
     render();
     renderSnapshotList();
     renderMixRows();
