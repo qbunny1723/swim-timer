@@ -6354,6 +6354,7 @@
       const contentWidth = pageWidth - margin * 2;
       const contentHeight = pageHeight - margin * 2;
       const titleHeight = 54;
+      const sectionTitleHeight = 30;
       const headerHeight = 24;
       const rowHeight = 23;
       const scale = 2;
@@ -6362,7 +6363,7 @@
       let current = [];
       let used = titleHeight;
       sections.forEach((section) => {
-        const sectionHeight = headerHeight * 2 + section.swimmers.length * rowHeight * 3 + 18;
+        const sectionHeight = sectionTitleHeight + headerHeight + section.swimmers.length * rowHeight * 3 + 18;
         if (current.length && used + sectionHeight > contentHeight) {
           chunks.push(current);
           current = [];
@@ -6413,20 +6414,26 @@
             });
             y += height;
           };
-          drawRow([
-            { text: section.date, bold: true },
-            { text: section.session, bold: true },
-          ], { bg: "#DCE7F1", color: "#19324B", bold: true, size: 12, height: 26 });
+          ctx.fillStyle = "#DCE7F1";
+          ctx.fillRect(margin, y, contentWidth, sectionTitleHeight);
+          ctx.strokeStyle = "#C9D8E5";
+          ctx.lineWidth = 0.8;
+          ctx.strokeRect(margin, y, contentWidth, sectionTitleHeight);
+          ctx.fillStyle = "#19324B";
+          ctx.font = "700 15px Microsoft JhengHei, Arial";
+          ctx.fillText(`${section.date}　${section.session}`, margin + 10, y + 20);
+          y += sectionTitleHeight;
           const headers = ["組", "序", "課表", "內容/含休", "姓名", "PB參考", ...Array.from({ length: section.maxTrips }, (_, index) => `第${index + 1}趟`), "完成", "最佳", "趟次", "差", "平均"];
           drawRow(headers.map((text) => ({ text, bold: true })), { bg: "#FFF0F7", color: "#542645", bold: true, size: 10, height: headerHeight });
           section.swimmers.forEach((swimmer) => {
             const base = [swimmer.session, swimmer.order, swimmer.group, swimmer.workout, swimmer.name, swimmer.pbRef];
             const metrics = [swimmer.completed, swimmer.best, swimmer.bestTrip, swimmer.diff, swimmer.avg];
+            const groupColors = pdfGroupColors(swimmer.group);
             drawRow([
               ...base.map((text) => ({ text, bold: text === swimmer.name })),
               ...Array.from({ length: section.maxTrips }, (_, index) => ({ text: swimmer.scores[index] || "", color: "#E44D82", bold: true })),
               ...metrics.map((text) => ({ text })),
-            ], { bg: "#FFFFFF", size: 10, height: rowHeight });
+            ], { bg: groupColors.main, size: 10, height: rowHeight });
             drawRow([
               ...["", "", "", "", "休息/含休差", ""].map((text) => ({ text, bold: !!text, color: "#6B7280" })),
               ...Array.from({ length: section.maxTrips }, (_, index) => {
@@ -6436,7 +6443,7 @@
                 return { text, color, bg, bold: !!text };
               }),
               ...["", "", "", "", ""].map((text) => ({ text })),
-            ], { bg: "#F8FBFC", color: "#6B7280", size: 9, height: rowHeight });
+            ], { bg: groupColors.subtle, color: "#6B7280", size: 9, height: rowHeight });
             drawRow([
               ...["", "", "", "", "強度", ""].map((text) => ({ text, bold: !!text, color: "#9E939D" })),
               ...Array.from({ length: section.maxTrips }, (_, index) => {
@@ -6446,7 +6453,7 @@
                 return { text, ...colors, bold: !!text };
               }),
               ...["", "", "", "", ""].map((text) => ({ text })),
-            ], { bg: "#F3F7FA", color: "#6B7280", size: 9, height: rowHeight });
+            ], { bg: groupColors.subtle, color: "#6B7280", size: 9, height: rowHeight });
           });
           y += 18;
         });
@@ -6466,6 +6473,17 @@
       if (percent >= 90) return { color: "#1765AE", bg: "#DCEEFF" };
       if (percent >= 85) return { color: "#087A63", bg: "#DDF6EE" };
       return { color: "#6C637B", bg: "#ECE9F2" };
+    }
+
+    function pdfGroupColors(group) {
+      const colors = {
+        A: { main: "#E8F3FF", subtle: "#F4FAFF" },
+        B: { main: "#E7F7EF", subtle: "#F3FBF7" },
+        C: { main: "#FFF3DB", subtle: "#FFF9ED" },
+        D: { main: "#F0E9FF", subtle: "#F8F4FF" },
+        E: { main: "#F3F1EE", subtle: "#FAF8F5" },
+      };
+      return colors[String(group || "").trim().toUpperCase()] || { main: "#FFFFFF", subtle: "#F8FBFC" };
     }
 
     function drawPdfCellText(ctx, text, x, y, maxWidth) {
