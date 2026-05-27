@@ -6259,12 +6259,12 @@
         return;
       }
       const fallbackDate = currentResultDate();
-      const rows = dailySummaryRows(fallbackDate);
-      if (!rows.length) {
+      const sections = coachPdfSections(fallbackDate);
+      if (!sections.length) {
         setStatus("目前沒有暫存整理表可以下載。", "bad");
         return;
       }
-      const pages = coachPdfPages(rows, fallbackDate);
+      const pages = coachPdfPages(sections, fallbackDate);
       const blob = buildImagePdf(pages);
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
@@ -6274,28 +6274,102 @@
       setStatus(`已下載 ${fallbackDate}_游泳整理總表.pdf。`, "good");
     }
 
-    function coachPdfPages(rows, fallbackDate) {
-      const pageWidth = 842;
-      const pageHeight = 595;
-      const margin = 22;
+    function coachPdfSections(fallbackDate) {
+      return snapshots.map((snapshot) => {
+        const entries = snapshot.entries || [];
+        const settings = normalizeCourseSettings(snapshot.courseSettings);
+        const date = compactDisplayDate(snapshot.date || fallbackDate);
+        const session = `第${settings.sessionGroup || snapshot.sessionGroup || 1}組`;
+        const swimmers = grouped(entries).map(({ name, trips }) => {
+          const meta = summaryMetaForContext(name, entries, settings, snapshot.summaryMetaOverrides || {});
+          const results = trips.map((trip) => {
+            if (!trip.back || (!trip.start && !(trip.back.deductSeconds || 0))) return null;
+            const backTotal = entryTotal(trip.back);
+            const startTotal = entryTotal(trip.start);
+            if (!Number.isFinite(backTotal) || (trip.start && !Number.isFinite(startTotal))) return null;
+            return trip.start
+              ? backTotal - startTotal - (trip.back.deductSeconds || 0)
+              : backTotal - (trip.back.deductSeconds || 0);
+          });
+          const valid = results.filter((value) => value !== null && value >= 0);
+          if (!valid.length) return null;
+          const lastTrip = results.reduce((last, value, index) => value !== null ? index + 1 : last, 0);
+          const ranks = personalRankMap(results);
+          const intervalDiffs = courseIntervalDiffMap(trips, meta.time?.total);
+          const metrics = swimmerMetrics(trips);
+          const avg = averageSeconds(valid);
+          const itemPb = effectivePb(name, meta.item, snapshot.lapPbOverrides || {});
+          return {
+            session,
+            order: meta.personOrder,
+            group: meta.groupLabel,
+            workout: workoutSummaryLabel(meta.item, meta.timeRaw),
+            name,
+            pbRef: itemPb?.pb || "",
+            tripCount: lastTrip,
+            scores: Array.from({ length: lastTrip }, (_, index) => {
+              const result = results[index];
+              if (result === null) return "";
+              if (result < 0) return "回來早於出發";
+              const rank = ranks.get(index);
+              return `${fmt(result)}${rank ? ` #${rank}` : ""}`;
+            }),
+            rests: Array.from({ length: lastTrip }, (_, index) => {
+              const restLabel = restLabelForTrip(trips, index);
+              const diff = intervalDiffs.get(index);
+              const diffLabel = Number.isFinite(diff) ? `${diff > 0 ? "+" : ""}${diff}秒` : "";
+              return [restLabel, diffLabel].filter(Boolean).join(" ");
+            }),
+            intensities: Array.from({ length: lastTrip }, (_, index) => {
+              const info = lapIntensityInfo(name, meta.item, results[index], index, snapshot.lapItemOverrides || {}, snapshot.lapPbOverrides || {});
+              const prefix = info.selectedItem ? `${info.actualItem} ` : "";
+              return info.label ? `${prefix}${info.label}` : (info.selectedItem ? `${info.actualItem} 尚無PB` : "");
+            }),
+            completed: valid.length,
+            best: fmt(metrics.pb),
+            bestTrip: metrics.bestTrip,
+            diff: metrics.improvement === "" ? "" : `${metrics.improvement > 0 ? "+" : ""}${metrics.improvement}秒`,
+            avg: fmt(avg),
+          };
+        }).filter(Boolean);
+        if (!swimmers.length) return null;
+        swimmers.sort((a, b) =>
+          courseGroupOrder(a.group) - courseGroupOrder(b.group) ||
+          (Number(a.order) || 999) - (Number(b.order) || 999) ||
+          String(a.name).localeCompare(String(b.name), "zh-Hant")
+        );
+        return {
+          date,
+          session,
+          maxTrips: Math.max(0, ...swimmers.map((swimmer) => swimmer.tripCount)),
+          swimmers,
+        };
+      }).filter(Boolean);
+    }
+
+    function coachPdfPages(sections, fallbackDate) {
+      const pageWidth = 1191;
+      const pageHeight = 842;
+      const margin = 24;
       const contentWidth = pageWidth - margin * 2;
       const contentHeight = pageHeight - margin * 2;
-      const titleHeight = 30;
-      const rowHeight = 22;
+      const titleHeight = 54;
+      const headerHeight = 24;
+      const rowHeight = 23;
       const scale = 2;
       const pages = [];
       const chunks = [];
       let current = [];
       let used = titleHeight;
-      rows.forEach((row) => {
-        const height = row.some((cell) => String(cell || "").trim()) ? rowHeight : 12;
-        if (current.length && used + height > contentHeight) {
+      sections.forEach((section) => {
+        const sectionHeight = headerHeight * 2 + section.swimmers.length * rowHeight * 3 + 18;
+        if (current.length && used + sectionHeight > contentHeight) {
           chunks.push(current);
           current = [];
           used = titleHeight;
         }
-        current.push(row);
-        used += height;
+        current.push(section);
+        used += sectionHeight;
       });
       if (current.length) chunks.push(current);
       chunks.forEach((chunk, pageIndex) => {
@@ -6309,44 +6383,72 @@
         ctx.fillStyle = "#19324B";
         ctx.fillRect(0, 0, pageWidth, 44);
         ctx.fillStyle = "#ffffff";
-        ctx.font = "700 16px Microsoft JhengHei, Arial";
+        ctx.font = "700 18px Microsoft JhengHei, Arial";
         ctx.fillText(`${fallbackDate} 游泳整理總表`, margin, 28);
         ctx.font = "600 10px Microsoft JhengHei, Arial";
         ctx.fillText(`第 ${pageIndex + 1} / ${chunks.length} 頁`, pageWidth - margin - 64, 28);
 
-        const maxColumns = Math.max(...chunk.map((row) => row.length), 1);
-        const widths = Array.from({ length: maxColumns }, (_, column) => {
-          const sample = chunk.map((row) => String(row[column] || ""));
-          const maxLength = Math.max(2, ...sample.map((text) => text.length));
-          return Math.min(92, Math.max(42, maxLength * 9 + 16));
-        });
-        const widthScale = Math.min(1, contentWidth / widths.reduce((sum, width) => sum + width, 0));
-        const finalWidths = widths.map((width) => Math.max(32, width * widthScale));
         let y = 56;
-        chunk.forEach((row) => {
-          const isBlank = !row.some((cell) => String(cell || "").trim());
-          const isSectionTitle = row.length <= 2 && /^\d{4}/.test(String(row[0] || ""));
-          const isHeader = row[0] === "組";
-          const height = isBlank ? 12 : rowHeight;
-          if (isBlank) {
+        chunk.forEach((section) => {
+          const baseWidths = [58, 36, 42, 92, 96, 64];
+          const tripWidths = Array.from({ length: section.maxTrips }, () => 78);
+          const metricWidths = [44, 58, 48, 58, 62];
+          const widths = [...baseWidths, ...tripWidths, ...metricWidths];
+          const widthScale = Math.min(1, contentWidth / widths.reduce((sum, width) => sum + width, 0));
+          const finalWidths = widths.map((width) => width * widthScale);
+          const drawRow = (cells, options = {}) => {
+            let x = margin;
+            const height = options.height || rowHeight;
+            cells.forEach((cell, column) => {
+              const width = finalWidths[column] || 42;
+              ctx.fillStyle = cell.bg || options.bg || "#FFFFFF";
+              ctx.fillRect(x, y, width, height);
+              ctx.strokeStyle = "#D6E0E8";
+              ctx.lineWidth = 0.7;
+              ctx.strokeRect(x, y, width, height);
+              ctx.fillStyle = cell.color || options.color || "#243746";
+              ctx.font = `${cell.bold || options.bold ? "700" : "500"} ${cell.size || options.size || 10}px Microsoft JhengHei, Arial`;
+              drawPdfCellText(ctx, cell.text ?? cell, x + 4, y + Math.min(16, height - 7), width - 8);
+              x += width;
+            });
             y += height;
-            return;
-          }
-          let x = margin;
-          const bg = isSectionTitle ? "#DCE7F1" : isHeader ? "#FFF0F7" : "#FFFFFF";
-          row.forEach((cell, column) => {
-            const width = finalWidths[column] || 44;
-            ctx.fillStyle = bg;
-            ctx.fillRect(x, y, width, height);
-            ctx.strokeStyle = "#D6E0E8";
-            ctx.lineWidth = 0.7;
-            ctx.strokeRect(x, y, width, height);
-            ctx.fillStyle = isSectionTitle ? "#19324B" : isHeader ? "#542645" : "#243746";
-            ctx.font = `${isSectionTitle || isHeader ? "700" : "500"} 9px Microsoft JhengHei, Arial`;
-            drawPdfCellText(ctx, String(cell || ""), x + 4, y + 14, width - 8);
-            x += width;
+          };
+          drawRow([
+            { text: section.date, bold: true },
+            { text: section.session, bold: true },
+          ], { bg: "#DCE7F1", color: "#19324B", bold: true, size: 12, height: 26 });
+          const headers = ["組", "序", "課表", "內容/含休", "姓名", "PB參考", ...Array.from({ length: section.maxTrips }, (_, index) => `第${index + 1}趟`), "完成", "最佳", "趟次", "差", "平均"];
+          drawRow(headers.map((text) => ({ text, bold: true })), { bg: "#FFF0F7", color: "#542645", bold: true, size: 10, height: headerHeight });
+          section.swimmers.forEach((swimmer) => {
+            const base = [swimmer.session, swimmer.order, swimmer.group, swimmer.workout, swimmer.name, swimmer.pbRef];
+            const metrics = [swimmer.completed, swimmer.best, swimmer.bestTrip, swimmer.diff, swimmer.avg];
+            drawRow([
+              ...base.map((text) => ({ text, bold: text === swimmer.name })),
+              ...Array.from({ length: section.maxTrips }, (_, index) => ({ text: swimmer.scores[index] || "", color: "#E44D82", bold: true })),
+              ...metrics.map((text) => ({ text })),
+            ], { bg: "#FFFFFF", size: 10, height: rowHeight });
+            drawRow([
+              ...["", "", "", "", "休息/含休差", ""].map((text) => ({ text, bold: !!text, color: "#6B7280" })),
+              ...Array.from({ length: section.maxTrips }, (_, index) => {
+                const text = swimmer.rests[index] || "";
+                const color = text.includes("+") ? "#C3445C" : text.includes("-") ? "#087856" : "#0A6F68";
+                const bg = text.includes("+") ? "#FFE2E8" : text ? "#D6F5EF" : "#F8FBFC";
+                return { text, color, bg, bold: !!text };
+              }),
+              ...["", "", "", "", ""].map((text) => ({ text })),
+            ], { bg: "#F8FBFC", color: "#6B7280", size: 9, height: rowHeight });
+            drawRow([
+              ...["", "", "", "", "強度", ""].map((text) => ({ text, bold: !!text, color: "#9E939D" })),
+              ...Array.from({ length: section.maxTrips }, (_, index) => {
+                const text = swimmer.intensities[index] || "";
+                const percent = Number((text.match(/(\d+)%/) || [])[1]);
+                const colors = pdfIntensityColors(percent);
+                return { text, ...colors, bold: !!text };
+              }),
+              ...["", "", "", "", ""].map((text) => ({ text })),
+            ], { bg: "#F3F7FA", color: "#6B7280", size: 9, height: rowHeight });
           });
-          y += height;
+          y += 18;
         });
         pages.push({
           width: pageWidth,
@@ -6355,6 +6457,15 @@
         });
       });
       return pages;
+    }
+
+    function pdfIntensityColors(percent) {
+      if (!Number.isFinite(percent)) return { color: "#6C637B", bg: "#ECE9F2" };
+      if (percent >= 100) return { color: "#BB244F", bg: "#FFD7E2" };
+      if (percent >= 95) return { color: "#6241C2", bg: "#E9DFFF" };
+      if (percent >= 90) return { color: "#1765AE", bg: "#DCEEFF" };
+      if (percent >= 85) return { color: "#087A63", bg: "#DDF6EE" };
+      return { color: "#6C637B", bg: "#ECE9F2" };
     }
 
     function drawPdfCellText(ctx, text, x, y, maxWidth) {
