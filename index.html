@@ -2490,10 +2490,7 @@
             <input id="pbStudentInput" type="text" list="pbStudentOptions" placeholder="例：盧冠羽">
           </label>
           <label>項目
-            <select id="pbItemSelect"></select>
-          </label>
-          <label id="pbCustomItemWrap" hidden>自訂項目
-            <input id="pbCustomItemInput" type="text" placeholder="例：75自、150自">
+            <input id="pbItemInput" type="text" list="pbItemOptions" placeholder="例：100自、75自">
           </label>
           <label>新PB
             <input id="pbValueInput" type="text" inputmode="decimal" placeholder="例：0:58.83">
@@ -2515,10 +2512,7 @@
             <textarea id="pbQueryNamesInput" style="min-height:70px;" placeholder="例：林育丞 盧冠羽 黃敬芫"></textarea>
           </label>
           <label>查詢項目
-            <select id="pbQueryItemSelect"></select>
-          </label>
-          <label id="pbQueryCustomItemWrap" hidden>自訂項目
-            <input id="pbQueryCustomItemInput" type="text" placeholder="例：75自、150自">
+            <input id="pbQueryItemInput" type="text" list="pbItemOptions" placeholder="例：100自、75自">
           </label>
           <button id="pbQueryBtn" type="button">查詢PB</button>
         </div>
@@ -2552,6 +2546,7 @@
 
   <input id="settingsImportInput" type="file" accept="application/json,.json" hidden>
   <datalist id="pbStudentOptions"></datalist>
+  <datalist id="pbItemOptions"></datalist>
 
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbzLKnWnLUhGO2nLKm5CCbqX3RfcOkKuDH6ymeVqefDOLiXpjCWSN5Vj5ksM5XkBT8K3Rg/exec"; // 新版游泳 Apps Script /exec 網址
@@ -2560,6 +2555,7 @@
     const SNAPSHOT_KEY = "swimTimerSnapshots";
     const PB_DATA_KEY = "swimTimerPbData";
     const PB_CANDIDATES_KEY = "swimTimerPbCandidates";
+    const COMMON_PB_STUDENTS = ["盧冠羽", "趙祤絜", "盧昱妡", "林育丞", "林沛欣", "方芮婕", "黃敬芫", "黃敬倫", "陳唯恩", "陳曉寬", "陳奕飛", "魏劭倫", "魏彤恩", "黃柏豪", "張守邦"];
     const maxTrips = 6;
     const COURSE_GROUPS = ["A", "B", "C", "D", "E"];
     const state = { entries: [], issues: [], summaryMetaOverrides: {}, lapItemOverrides: {}, lapPbOverrides: {} };
@@ -3248,13 +3244,11 @@
     }
 
     function selectedPbItem() {
-      const selected = String(el("pbItemSelect")?.value || "").trim();
-      return selected === "__custom" ? String(el("pbCustomItemInput")?.value || "").trim() : selected;
+      return String(el("pbItemInput")?.value || "").trim();
     }
 
     function selectedQueryItem() {
-      const selected = String(el("pbQueryItemSelect")?.value || "").trim();
-      return selected === "__custom" ? String(el("pbQueryCustomItemInput")?.value || "").trim() : selected;
+      return String(el("pbQueryItemInput")?.value || "").trim();
     }
 
     function selectedPbCandidate() {
@@ -3265,10 +3259,6 @@
       return pbState.headers
         .filter((header) => !["分組", "student_id", "姓名"].includes(String(header || "").trim()))
         .filter(Boolean);
-    }
-
-    function pbItemOptionsHtml() {
-      return `${pbItemHeaders().map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`).join("")}<option value="__custom">自訂</option>`;
     }
 
     function studentIdForPbName(name) {
@@ -3349,31 +3339,14 @@
 
     function renderPbManager() {
       const studentInput = el("pbStudentInput");
-      const itemSelect = el("pbItemSelect");
-      const queryItemSelect = el("pbQueryItemSelect");
+      const itemInput = el("pbItemInput");
+      const queryItemInput = el("pbQueryItemInput");
       const status = el("pbManagerStatus");
-      if (!studentInput || !itemSelect || !queryItemSelect) return;
-      const nameIndex = pbState.headers.indexOf("姓名");
-      const groupIndex = pbState.headers.indexOf("分組");
-      const idIndex = pbState.headers.indexOf("student_id");
-      const currentItem = itemSelect.value;
-      const currentQueryItem = queryItemSelect.value;
-      const students = pbState.rows
-        .map((row) => ({
-          name: String(row[nameIndex] || "").trim(),
-          group: groupIndex >= 0 ? String(row[groupIndex] || "").trim() : "",
-          id: idIndex >= 0 ? String(row[idIndex] || "").trim() : "",
-        }))
-        .filter((item) => item.name);
+      if (!studentInput || !itemInput || !queryItemInput) return;
       const optionList = el("pbStudentOptions");
-      if (optionList) optionList.innerHTML = students.map((student) => `<option value="${escapeHtml(student.name)}">${escapeHtml([student.group, student.id].filter(Boolean).join(" "))}</option>`).join("");
-      const items = pbItemHeaders();
-      itemSelect.innerHTML = pbItemOptionsHtml();
-      queryItemSelect.innerHTML = pbItemOptionsHtml();
-      if (currentItem && (items.includes(currentItem) || currentItem === "__custom")) itemSelect.value = currentItem;
-      if (currentQueryItem && (items.includes(currentQueryItem) || currentQueryItem === "__custom")) queryItemSelect.value = currentQueryItem;
-      if (el("pbCustomItemWrap")) el("pbCustomItemWrap").hidden = itemSelect.value !== "__custom";
-      if (el("pbQueryCustomItemWrap")) el("pbQueryCustomItemWrap").hidden = queryItemSelect.value !== "__custom";
+      if (optionList) optionList.innerHTML = COMMON_PB_STUDENTS.map((name) => `<option value="${escapeHtml(name)}"></option>`).join("");
+      const itemOptions = el("pbItemOptions");
+      if (itemOptions) itemOptions.innerHTML = pbItemHeaders().map((item) => `<option value="${escapeHtml(item)}"></option>`).join("");
       if (el("pbEffectiveDate") && !el("pbEffectiveDate").value) el("pbEffectiveDate").value = currentResultDate();
       const selectedPb = getPb(selectedPbName(), selectedPbItem());
       const candidate = selectedPbCandidate();
@@ -7175,22 +7148,16 @@
       if (el("pbValueInput")) el("pbValueInput").placeholder = candidate && !candidate.ignored ? `候選最佳 ${candidate.label}` : (selectedPb?.pb ? `目前PB ${selectedPb.pb}` : "例：0:58.83");
       renderPbManager();
     });
-    el("pbItemSelect")?.addEventListener("change", () => {
-      if (el("pbCustomItemWrap")) el("pbCustomItemWrap").hidden = el("pbItemSelect")?.value !== "__custom";
+    el("pbItemInput")?.addEventListener("input", () => {
       const selectedPb = getPb(selectedPbName(), selectedPbItem());
       const candidate = selectedPbCandidate();
       if (el("pbValueInput")) el("pbValueInput").placeholder = candidate && !candidate.ignored ? `候選最佳 ${candidate.label}` : (selectedPb?.pb ? `目前PB ${selectedPb.pb}` : "例：0:58.83");
       renderPbManager();
     });
-    el("pbCustomItemInput")?.addEventListener("input", renderPbManager);
-    el("pbQueryItemSelect")?.addEventListener("change", () => {
-      if (el("pbQueryCustomItemWrap")) el("pbQueryCustomItemWrap").hidden = el("pbQueryItemSelect")?.value !== "__custom";
+    el("pbQueryItemInput")?.addEventListener("input", () => {
       if (splitNameList(el("pbQueryNamesInput")?.value).length) renderPbManager();
     });
     el("pbQueryNamesInput")?.addEventListener("input", renderPbManager);
-    el("pbQueryCustomItemInput")?.addEventListener("input", () => {
-      if (splitNameList(el("pbQueryNamesInput")?.value).length) renderPbManager();
-    });
     loadPbCandidatesLocal();
     render();
     renderSnapshotList();
