@@ -3588,20 +3588,50 @@
       return positive.length === 1 ? positive[0].choice : null;
     }
 
+    function chooseContextualForwardTime(item, previousTime) {
+      const choices = Array.isArray(item.timeChoices) && item.timeChoices.length
+        ? item.timeChoices
+        : [{ label: parseTime(item.timeRaw)?.label || item.timeRaw, time: parseTime(item.timeRaw), mode: "base" }];
+      if (!previousTime || !choices.length) return null;
+      const scored = choices
+        .map((choice) => {
+          if (!choice.time) return null;
+          const delta = choice.time.total - previousTime.total;
+          if (!Number.isFinite(delta) || delta <= 0) return null;
+          const inRange = delta <= 20 * 60;
+          const score = (inRange ? 100000 : 0) - Math.abs(delta - 45);
+          return { choice, delta, inRange, score };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.score - a.score);
+      if (!scored.length) return null;
+      if (scored[0].inRange) return scored[0].choice;
+      return scored.length === 1 ? scored[0].choice : null;
+    }
+
     function applyContextualTimeChoices(items) {
       const startsByName = new Map();
+      const backsByName = new Map();
       items.forEach((item) => {
         if (!item.timeRaw || item.timeRaw === "-") return;
         if (item.action === "出發") {
-          const parsed = parseTime(item.timeRaw);
+          const forwardChoice = chooseContextualForwardTime(item, backsByName.get(item.name));
+          if (forwardChoice?.time) {
+            item.timeOverride = forwardChoice.time;
+            item.timeLabel = forwardChoice.label || forwardChoice.time.label;
+          }
+          const parsed = parseItemTime(item);
           if (parsed) startsByName.set(item.name, parsed);
           return;
         }
         if (item.action !== "回來") return;
         const chosen = chooseContextualBackTime(item, startsByName.get(item.name));
-        if (!chosen?.time) return;
-        item.timeOverride = chosen.time;
-        item.timeLabel = chosen.label || chosen.time.label;
+        if (chosen?.time) {
+          item.timeOverride = chosen.time;
+          item.timeLabel = chosen.label || chosen.time.label;
+        }
+        const parsed = parseItemTime(item);
+        if (parsed) backsByName.set(item.name, parsed);
       });
     }
 
@@ -5716,23 +5746,51 @@
       return filtered;
     }
 
+    function commandTextForNames(snapshot, names) {
+      const lines = (snapshot.entries || [])
+        .filter((entry) => names.has(entry.name))
+        .map((entry) => String(entry.raw || `${entry.name}${entry.time?.label || ""}${entry.action || ""}`).trim())
+        .filter(Boolean);
+      return lines.length ? lines.join("，") : (snapshot.commandText || "");
+    }
+
+    function courseSettingsForBackupGroup(settings, groupLabel) {
+      const normalized = normalizeCourseSettings(settings);
+      const planRow = activeCoursePlanRowsFromSettings(normalized).find((row) => row.groupLabel === groupLabel) || activeCoursePlanRowsFromSettings(normalized)[0] || {};
+      return normalizeCourseSettings({
+        sessionGroup: normalized.sessionGroup,
+        mixed: false,
+        defaultGroup: planRow.group || normalized.defaultGroup,
+        rows: [{
+          group: planRow.group || normalized.defaultGroup,
+          item: planRow.item || "",
+          timeRaw: planRow.timeRaw || "",
+          intervalRaw: planRow.intervalRaw || "",
+        }],
+      });
+    }
+
     function snapshotBackupPayload(snapshot, fallbackDate, groupLabel, headers, filteredRows, settings) {
       const nameIndex = headers.indexOf("姓名");
       const names = new Set(filteredRows.map((row) => String(row[nameIndex] || "").trim()).filter(Boolean));
-      const sessionGroup = settings.sessionGroup || snapshot.sessionGroup || "1";
+      const groupSettings = courseSettingsForBackupGroup(settings, groupLabel);
+      const sessionGroup = groupSettings.sessionGroup || snapshot.sessionGroup || "1";
       const sessionLabel = `第${sessionGroup}組`;
       const baseRecordId = ensureSnapshotRecordId(snapshot);
       const title = `${sessionLabel} ${groupLabel}課表`;
+      const commandText = commandTextForNames(snapshot, names);
       return normalizeSnapshot({
         ...snapshot,
         id: `${snapshot.id || baseRecordId}-${groupLabel}`,
         recordId: `${baseRecordId}|${groupLabel}`,
         title,
         date: snapshot.date || fallbackDate,
+        commandText,
+        originalCommandText: commandText,
         entries: (snapshot.entries || []).filter((entry) => names.has(entry.name)).map(cloneEntry),
         summaryTableRows: [headers, ...filteredRows],
         sessionGroup,
-        courseSettings: settings,
+        courseSettings: groupSettings,
         summaryMetaOverrides: filterObjectByNames(snapshot.summaryMetaOverrides, names),
         lapItemOverrides: filterObjectByNames(snapshot.lapItemOverrides, names),
         lapPbOverrides: filterObjectByNames(snapshot.lapPbOverrides, names),
@@ -5766,13 +5824,16 @@
       if (summaryRows.length <= 1) return [];
       const [headers, ...bodyRows] = summaryRows;
       const courseGroupIndex = headers.indexOf("課表");
-      if (courseGroupIndex < 0) return [];
+      const nameIndex = headers.indexOf("姓名");
+      if (courseGroupIndex < 0 || nameIndex < 0) return [];
       const plan = activeCoursePlanRowsFromSettings(settings);
       const planByLabel = new Map(plan.map((row) => [row.groupLabel, row]));
       const groups = Array.from(new Set(bodyRows.map((row) => String(row[courseGroupIndex] || "").trim()).filter(Boolean)));
       return groups.map((groupLabel) => {
         const planRow = planByLabel.get(groupLabel) || {};
         const filteredRows = bodyRows.filter((row) => String(row[courseGroupIndex] || "").trim() === groupLabel);
+        const names = new Set(filteredRows.map((row) => String(row[nameIndex] || "").trim()).filter(Boolean));
+        const commandText = commandTextForNames(snapshot, names);
         const key = `${sessionLabel}|${groupLabel}`;
         const title = `${date} ${sessionLabel} ${groupLabel}課表`;
         return {
@@ -5785,7 +5846,7 @@
             ["課表內容", planRow.item || "", "當趟含休", planRow.timeRaw || "", "出發間隔", planRow.intervalRaw || ""],
             [],
             ["原始語音輸入文字"],
-            [snapshot.commandText || ""],
+            [commandText],
             [],
             headers,
             ...filteredRows,
