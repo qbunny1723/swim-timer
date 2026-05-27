@@ -767,6 +767,11 @@
       min-height: 43px;
     }
 
+    .pb-manager-grid textarea {
+      min-width: 0;
+      resize: vertical;
+    }
+
     .pb-manager-status {
       color: var(--muted);
       font-weight: 800;
@@ -2482,10 +2487,13 @@
       <div class="body">
         <div class="pb-manager-grid">
           <label>學生
-            <select id="pbStudentSelect"></select>
+            <input id="pbStudentInput" type="text" list="pbStudentOptions" placeholder="例：盧冠羽">
           </label>
           <label>項目
             <select id="pbItemSelect"></select>
+          </label>
+          <label id="pbCustomItemWrap" hidden>自訂項目
+            <input id="pbCustomItemInput" type="text" placeholder="例：75自、150自">
           </label>
           <label>新PB
             <input id="pbValueInput" type="text" inputmode="decimal" placeholder="例：0:58.83">
@@ -2501,6 +2509,19 @@
         </div>
         <div id="pbManagerStatus" class="pb-manager-status">PB 尚未載入。</div>
         <div id="pbCandidateBox" class="status" style="margin-bottom:12px;">尚無 PB 候選。</div>
+        <div class="section-title" style="margin:0 -14px 10px;">課表PB查詢</div>
+        <div class="pb-manager-grid">
+          <label style="grid-column:span 2;">學生名單
+            <textarea id="pbQueryNamesInput" style="min-height:70px;" placeholder="例：林育丞 盧冠羽 黃敬芫"></textarea>
+          </label>
+          <label>查詢項目
+            <select id="pbQueryItemSelect"></select>
+          </label>
+          <label id="pbQueryCustomItemWrap" hidden>自訂項目
+            <input id="pbQueryCustomItemInput" type="text" placeholder="例：75自、150自">
+          </label>
+          <button id="pbQueryBtn" type="button">查詢PB</button>
+        </div>
         <div class="table-wrap" style="margin-bottom:14px;">
           <table id="pbDataTable"></table>
         </div>
@@ -2530,6 +2551,7 @@
   </div>
 
   <input id="settingsImportInput" type="file" accept="application/json,.json" hidden>
+  <datalist id="pbStudentOptions"></datalist>
 
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbzLKnWnLUhGO2nLKm5CCbqX3RfcOkKuDH6ymeVqefDOLiXpjCWSN5Vj5ksM5XkBT8K3Rg/exec"; // 新版游泳 Apps Script /exec 網址
@@ -3221,14 +3243,40 @@
       savePbCandidatesLocal();
     }
 
+    function selectedPbName() {
+      return String(el("pbStudentInput")?.value || "").trim();
+    }
+
+    function selectedPbItem() {
+      const selected = String(el("pbItemSelect")?.value || "").trim();
+      return selected === "__custom" ? String(el("pbCustomItemInput")?.value || "").trim() : selected;
+    }
+
+    function selectedQueryItem() {
+      const selected = String(el("pbQueryItemSelect")?.value || "").trim();
+      return selected === "__custom" ? String(el("pbQueryCustomItemInput")?.value || "").trim() : selected;
+    }
+
     function selectedPbCandidate() {
-      return pbCandidateState.items[pbCandidateKey(el("pbStudentSelect")?.value, el("pbItemSelect")?.value)] || null;
+      return pbCandidateState.items[pbCandidateKey(selectedPbName(), selectedPbItem())] || null;
     }
 
     function pbItemHeaders() {
       return pbState.headers
         .filter((header) => !["分組", "student_id", "姓名"].includes(String(header || "").trim()))
         .filter(Boolean);
+    }
+
+    function pbItemOptionsHtml() {
+      return `${pbItemHeaders().map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`).join("")}<option value="__custom">自訂</option>`;
+    }
+
+    function studentIdForPbName(name) {
+      const nameIndex = pbState.headers.indexOf("姓名");
+      const idIndex = pbState.headers.indexOf("student_id");
+      if (nameIndex < 0 || idIndex < 0) return "";
+      const row = pbState.rows.find((item) => String(item[nameIndex] || "").trim() === String(name || "").trim());
+      return row ? String(row[idIndex] || "").trim() : "";
     }
 
     function renderSimpleTable(tableId, headers, rows, limit = Infinity) {
@@ -3245,22 +3293,38 @@
       `;
     }
 
-    function attendedNames() {
-      const names = new Set();
-      grouped(state.entries).forEach(({ name }) => names.add(name));
-      snapshots.forEach((snapshot) => snapshotNames(snapshot).forEach((name) => names.add(name)));
-      return names;
+    function splitNameList(text) {
+      return String(text || "")
+        .split(/[\s,，、;；\n]+/)
+        .map((name) => name.trim())
+        .filter(Boolean);
     }
 
-    function pbQueryRows(name, item) {
+    function pbRowsForStudent(name) {
       const rows = [];
-      const normalizedItem = normalizePbItem(item);
       pbState.byNameItem.forEach((pb) => {
-        const matchStudent = name && pb.name === name;
-        const matchAttendedItem = normalizedItem && normalizePbItem(pb.item) === normalizedItem && attendedNames().has(pb.name);
-        if (matchStudent || matchAttendedItem) rows.push([pb.name, pb.item, pb.pb]);
+        if (pb.name === name) rows.push([pb.name, pb.item, pb.pb]);
       });
-      return rows.sort((a, b) => String(a[0]).localeCompare(String(b[0]), "zh-Hant") || String(a[1]).localeCompare(String(b[1]), "zh-Hant", { numeric: true }));
+      return rows.sort((a, b) => String(a[1]).localeCompare(String(b[1]), "zh-Hant", { numeric: true }));
+    }
+
+    function pbRowsForNamesAndItem(names, item) {
+      const normalizedItem = normalizePbItem(item);
+      return names.map((name) => {
+        const pb = getPb(name, normalizedItem);
+        return [name, item || normalizedItem, pb?.pb || "尚無PB"];
+      });
+    }
+
+    function runPbQuery() {
+      const names = splitNameList(el("pbQueryNamesInput")?.value);
+      const item = selectedQueryItem();
+      if (!names.length || !item) {
+        setStatus("請輸入學生名單並選擇或填寫查詢項目。", "bad");
+        return;
+      }
+      renderSimpleTable("pbDataTable", ["姓名", "項目", "正式PB"], pbRowsForNamesAndItem(names, item));
+      setStatus(`已查詢 ${names.length} 位學生的 ${item} PB。`, "good");
     }
 
     function renderPbCandidateBox() {
@@ -3284,15 +3348,16 @@
     }
 
     function renderPbManager() {
-      const studentSelect = el("pbStudentSelect");
+      const studentInput = el("pbStudentInput");
       const itemSelect = el("pbItemSelect");
+      const queryItemSelect = el("pbQueryItemSelect");
       const status = el("pbManagerStatus");
-      if (!studentSelect || !itemSelect) return;
+      if (!studentInput || !itemSelect || !queryItemSelect) return;
       const nameIndex = pbState.headers.indexOf("姓名");
       const groupIndex = pbState.headers.indexOf("分組");
       const idIndex = pbState.headers.indexOf("student_id");
-      const currentStudent = studentSelect.value;
       const currentItem = itemSelect.value;
+      const currentQueryItem = queryItemSelect.value;
       const students = pbState.rows
         .map((row) => ({
           name: String(row[nameIndex] || "").trim(),
@@ -3300,40 +3365,42 @@
           id: idIndex >= 0 ? String(row[idIndex] || "").trim() : "",
         }))
         .filter((item) => item.name);
-      studentSelect.innerHTML = students.map((student) => `
-        <option value="${escapeHtml(student.name)}" data-student-id="${escapeHtml(student.id)}">${escapeHtml([student.group, student.name].filter(Boolean).join(" "))}</option>
-      `).join("");
+      const optionList = el("pbStudentOptions");
+      if (optionList) optionList.innerHTML = students.map((student) => `<option value="${escapeHtml(student.name)}">${escapeHtml([student.group, student.id].filter(Boolean).join(" "))}</option>`).join("");
       const items = pbItemHeaders();
-      itemSelect.innerHTML = items.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`).join("");
-      if (currentStudent && students.some((student) => student.name === currentStudent)) studentSelect.value = currentStudent;
-      if (currentItem && items.includes(currentItem)) itemSelect.value = currentItem;
+      itemSelect.innerHTML = pbItemOptionsHtml();
+      queryItemSelect.innerHTML = pbItemOptionsHtml();
+      if (currentItem && (items.includes(currentItem) || currentItem === "__custom")) itemSelect.value = currentItem;
+      if (currentQueryItem && (items.includes(currentQueryItem) || currentQueryItem === "__custom")) queryItemSelect.value = currentQueryItem;
+      if (el("pbCustomItemWrap")) el("pbCustomItemWrap").hidden = itemSelect.value !== "__custom";
+      if (el("pbQueryCustomItemWrap")) el("pbQueryCustomItemWrap").hidden = queryItemSelect.value !== "__custom";
       if (el("pbEffectiveDate") && !el("pbEffectiveDate").value) el("pbEffectiveDate").value = currentResultDate();
-      const selectedPb = getPb(studentSelect.value, itemSelect.value);
+      const selectedPb = getPb(selectedPbName(), selectedPbItem());
       const candidate = selectedPbCandidate();
       if (el("pbValueInput") && !el("pbValueInput").value) el("pbValueInput").placeholder = candidate && !candidate.ignored ? `候選最佳 ${candidate.label}` : (selectedPb?.pb ? `目前PB ${selectedPb.pb}` : "例：0:58.83");
       if (status) status.textContent = pbState.studentCount
         ? `已載入 ${pbState.studentCount} 位學生 PB。手動修改會立即更新 PB資料，並寫入 PB更新紀錄。`
         : "PB 尚未載入。";
       renderPbCandidateBox();
-      renderSimpleTable("pbDataTable", ["姓名", "項目", "正式PB"], pbQueryRows(studentSelect.value, itemSelect.value));
+      const queryNames = splitNameList(el("pbQueryNamesInput")?.value);
+      if (queryNames.length && selectedQueryItem()) renderSimpleTable("pbDataTable", ["姓名", "項目", "正式PB"], pbRowsForNamesAndItem(queryNames, selectedQueryItem()));
+      else if (selectedPbName()) renderSimpleTable("pbDataTable", ["姓名", "項目", "正式PB"], pbRowsForStudent(selectedPbName()));
+      else renderSimpleTable("pbDataTable", ["姓名", "項目", "正式PB"], []);
       const historyRows = pbState.historyRows.slice().reverse();
       renderSimpleTable("pbHistoryTable", pbState.historyHeaders, historyRows, 30);
     }
 
     async function saveManualPb() {
-      const studentSelect = el("pbStudentSelect");
-      const itemSelect = el("pbItemSelect");
       const pbInput = el("pbValueInput");
-      const name = studentSelect?.value || "";
-      const item = itemSelect?.value || "";
+      const name = selectedPbName();
+      const item = selectedPbItem();
       const pbText = String(pbInput?.value || "").trim();
       const parsed = parseTime(pbText)?.total ?? parsePbSeconds(pbText);
       if (!name || !item || !Number.isFinite(parsed) || parsed <= 0) {
         setStatus("請選學生、項目，並輸入可判讀的 PB，例如 0:58.83。", "bad");
         return;
       }
-      const option = studentSelect.selectedOptions?.[0];
-      const studentId = option?.dataset?.studentId || "";
+      const studentId = studentIdForPbName(name);
       const effectiveDate = el("pbEffectiveDate")?.value || currentResultDate();
       const candidate = selectedPbCandidate();
       const isCandidateSave = candidate && !candidate.ignored && Math.abs(Number(candidate.seconds) - parsed) < 0.01;
@@ -7101,17 +7168,28 @@
     el("savePbBtn")?.addEventListener("click", saveManualPb);
     el("applyPbCandidateBtn")?.addEventListener("click", applySelectedPbCandidate);
     el("ignorePbCandidateBtn")?.addEventListener("click", ignoreSelectedPbCandidate);
-    el("pbStudentSelect")?.addEventListener("change", () => {
-      const selectedPb = getPb(el("pbStudentSelect")?.value, el("pbItemSelect")?.value);
+    el("pbQueryBtn")?.addEventListener("click", runPbQuery);
+    el("pbStudentInput")?.addEventListener("input", () => {
+      const selectedPb = getPb(selectedPbName(), selectedPbItem());
       const candidate = selectedPbCandidate();
       if (el("pbValueInput")) el("pbValueInput").placeholder = candidate && !candidate.ignored ? `候選最佳 ${candidate.label}` : (selectedPb?.pb ? `目前PB ${selectedPb.pb}` : "例：0:58.83");
       renderPbManager();
     });
     el("pbItemSelect")?.addEventListener("change", () => {
-      const selectedPb = getPb(el("pbStudentSelect")?.value, el("pbItemSelect")?.value);
+      if (el("pbCustomItemWrap")) el("pbCustomItemWrap").hidden = el("pbItemSelect")?.value !== "__custom";
+      const selectedPb = getPb(selectedPbName(), selectedPbItem());
       const candidate = selectedPbCandidate();
       if (el("pbValueInput")) el("pbValueInput").placeholder = candidate && !candidate.ignored ? `候選最佳 ${candidate.label}` : (selectedPb?.pb ? `目前PB ${selectedPb.pb}` : "例：0:58.83");
       renderPbManager();
+    });
+    el("pbCustomItemInput")?.addEventListener("input", renderPbManager);
+    el("pbQueryItemSelect")?.addEventListener("change", () => {
+      if (el("pbQueryCustomItemWrap")) el("pbQueryCustomItemWrap").hidden = el("pbQueryItemSelect")?.value !== "__custom";
+      if (splitNameList(el("pbQueryNamesInput")?.value).length) renderPbManager();
+    });
+    el("pbQueryNamesInput")?.addEventListener("input", renderPbManager);
+    el("pbQueryCustomItemInput")?.addEventListener("input", () => {
+      if (splitNameList(el("pbQueryNamesInput")?.value).length) renderPbManager();
     });
     loadPbCandidatesLocal();
     render();
