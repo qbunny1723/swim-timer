@@ -6397,6 +6397,7 @@
           const widths = [...baseWidths, ...tripWidths, ...metricWidths];
           const widthScale = Math.min(1, contentWidth / widths.reduce((sum, width) => sum + width, 0));
           const finalWidths = widths.map((width) => width * widthScale);
+          const tableWidth = finalWidths.reduce((sum, width) => sum + width, 0);
           const drawRow = (cells, options = {}) => {
             let x = margin;
             const height = options.height || rowHeight;
@@ -6415,10 +6416,10 @@
             y += height;
           };
           ctx.fillStyle = "#DCE7F1";
-          ctx.fillRect(margin, y, contentWidth, sectionTitleHeight);
+          ctx.fillRect(margin, y, tableWidth, sectionTitleHeight);
           ctx.strokeStyle = "#C9D8E5";
           ctx.lineWidth = 0.8;
-          ctx.strokeRect(margin, y, contentWidth, sectionTitleHeight);
+          ctx.strokeRect(margin, y, tableWidth, sectionTitleHeight);
           ctx.fillStyle = "#19324B";
           ctx.font = "700 15px Microsoft JhengHei, Arial";
           ctx.fillText(`${section.date}　${section.session}`, margin + 10, y + 20);
