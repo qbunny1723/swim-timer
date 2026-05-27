@@ -2495,7 +2495,12 @@
           </label>
           <button id="savePbBtn" type="button">儲存PB</button>
         </div>
+        <div class="button-row" style="margin-bottom:10px;">
+          <button id="applyPbCandidateBtn" type="button" class="secondary">套用候選最佳</button>
+          <button id="ignorePbCandidateBtn" type="button" class="secondary">忽略候選</button>
+        </div>
         <div id="pbManagerStatus" class="pb-manager-status">PB 尚未載入。</div>
+        <div id="pbCandidateBox" class="status" style="margin-bottom:12px;">尚無 PB 候選。</div>
         <div class="table-wrap" style="margin-bottom:14px;">
           <table id="pbDataTable"></table>
         </div>
@@ -2532,11 +2537,13 @@
     const LANE_PLAN_KEY = "swimTimerLanePlan";
     const SNAPSHOT_KEY = "swimTimerSnapshots";
     const PB_DATA_KEY = "swimTimerPbData";
+    const PB_CANDIDATES_KEY = "swimTimerPbCandidates";
     const maxTrips = 6;
     const COURSE_GROUPS = ["A", "B", "C", "D", "E"];
     const state = { entries: [], issues: [], summaryMetaOverrides: {}, lapItemOverrides: {}, lapPbOverrides: {} };
     const parseState = { source: "", items: [], issues: [] };
     const pbState = { headers: [], rows: [], historyHeaders: [], historyRows: [], byNameItem: new Map(), studentCount: 0, loadedAt: "" };
+    const pbCandidateState = { items: {} };
     let snapshots = [];
     let recognition = null;
     let listening = false;
@@ -3143,6 +3150,81 @@
       return pbState.byNameItem.get(`${String(name || "").trim()}|||${normalizePbItem(item)}`) || null;
     }
 
+    function pbCandidateKey(name, item) {
+      return `${String(name || "").trim()}|||${normalizePbItem(item)}`;
+    }
+
+    function loadPbCandidatesLocal() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(PB_CANDIDATES_KEY) || "{}");
+        pbCandidateState.items = parsed && typeof parsed === "object" ? parsed : {};
+      } catch {
+        pbCandidateState.items = {};
+      }
+    }
+
+    function savePbCandidatesLocal() {
+      try { localStorage.setItem(PB_CANDIDATES_KEY, JSON.stringify(pbCandidateState.items)); } catch {}
+    }
+
+    function considerPbCandidate(candidate) {
+      if (!candidate?.name || !candidate?.item || !Number.isFinite(candidate.seconds)) return;
+      const official = getPb(candidate.name, candidate.item);
+      if (official && !(candidate.seconds < official.seconds)) return;
+      const key = pbCandidateKey(candidate.name, candidate.item);
+      const existing = pbCandidateState.items[key];
+      if (existing?.ignored && candidate.seconds >= Number(existing.seconds)) return;
+      if (!existing || existing.ignored || candidate.seconds < Number(existing.seconds)) {
+        pbCandidateState.items[key] = { ...candidate, key, ignored: false, updatedAt: new Date().toISOString() };
+      }
+    }
+
+    function scanPbCandidatesFromEntries(entries, options = {}) {
+      const settings = normalizeCourseSettings(options.courseSettings || currentCourseSettings());
+      const overrides = options.summaryMetaOverrides || state.summaryMetaOverrides;
+      const date = options.date || currentResultDate();
+      const sourceLabel = options.sourceLabel || sessionGroupLabel();
+      grouped(entries || []).forEach(({ name, trips }) => {
+        const meta = summaryMetaForContext(name, entries || [], settings, overrides);
+        const metrics = swimmerMetrics(trips);
+        if (!meta.item || !Number.isFinite(metrics.pb)) return;
+        considerPbCandidate({
+          name,
+          item: meta.item,
+          seconds: metrics.pb,
+          label: fmt(metrics.pb),
+          bestTrip: metrics.bestTrip,
+          date,
+          sourceLabel,
+          recordId: options.recordId || "",
+          officialPb: getPb(name, meta.item)?.pb || "",
+        });
+      });
+    }
+
+    function refreshPbCandidates() {
+      scanPbCandidatesFromEntries(state.entries, { date: currentResultDate(), sourceLabel: sessionGroupLabel() });
+      snapshots.forEach((snapshot, index) => {
+        scanPbCandidatesFromEntries(snapshot.entries || [], {
+          courseSettings: snapshot.courseSettings,
+          summaryMetaOverrides: snapshot.summaryMetaOverrides || {},
+          date: snapshot.date || currentResultDate(),
+          sourceLabel: snapshot.title || `暫存第${index + 1}組`,
+          recordId: snapshot.recordId || snapshot.id || "",
+        });
+      });
+      Object.keys(pbCandidateState.items).forEach((key) => {
+        const candidate = pbCandidateState.items[key];
+        const official = getPb(candidate.name, candidate.item);
+        if (official && Number(candidate.seconds) >= official.seconds) delete pbCandidateState.items[key];
+      });
+      savePbCandidatesLocal();
+    }
+
+    function selectedPbCandidate() {
+      return pbCandidateState.items[pbCandidateKey(el("pbStudentSelect")?.value, el("pbItemSelect")?.value)] || null;
+    }
+
     function pbItemHeaders() {
       return pbState.headers
         .filter((header) => !["分組", "student_id", "姓名"].includes(String(header || "").trim()))
@@ -3161,6 +3243,44 @@
           `).join("")}
         </tbody>
       `;
+    }
+
+    function attendedNames() {
+      const names = new Set();
+      grouped(state.entries).forEach(({ name }) => names.add(name));
+      snapshots.forEach((snapshot) => snapshotNames(snapshot).forEach((name) => names.add(name)));
+      return names;
+    }
+
+    function pbQueryRows(name, item) {
+      const rows = [];
+      const normalizedItem = normalizePbItem(item);
+      pbState.byNameItem.forEach((pb) => {
+        const matchStudent = name && pb.name === name;
+        const matchAttendedItem = normalizedItem && normalizePbItem(pb.item) === normalizedItem && attendedNames().has(pb.name);
+        if (matchStudent || matchAttendedItem) rows.push([pb.name, pb.item, pb.pb]);
+      });
+      return rows.sort((a, b) => String(a[0]).localeCompare(String(b[0]), "zh-Hant") || String(a[1]).localeCompare(String(b[1]), "zh-Hant", { numeric: true }));
+    }
+
+    function renderPbCandidateBox() {
+      const box = el("pbCandidateBox");
+      if (!box) return;
+      const candidates = Object.values(pbCandidateState.items)
+        .filter((item) => !item.ignored)
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || Number(a.seconds) - Number(b.seconds));
+      const current = selectedPbCandidate();
+      if (current && !current.ignored) {
+        box.innerHTML = `候選最佳：<strong>${escapeHtml(current.name)} ${escapeHtml(current.item)} ${escapeHtml(current.label)}</strong>，來源 ${escapeHtml(current.date || "")} ${escapeHtml(current.sourceLabel || "")} ${escapeHtml(current.bestTrip || "")}。`;
+        return;
+      }
+      if (!candidates.length) {
+        box.textContent = "尚無 PB 候選。";
+        return;
+      }
+      box.innerHTML = candidates.slice(0, 5).map((item) => `
+        <div>${escapeHtml(item.name)} ${escapeHtml(item.item)}：<strong>${escapeHtml(item.label)}</strong>（${escapeHtml(item.date || "")} ${escapeHtml(item.sourceLabel || "")} ${escapeHtml(item.bestTrip || "")}）</div>
+      `).join("");
     }
 
     function renderPbManager() {
@@ -3189,11 +3309,13 @@
       if (currentItem && items.includes(currentItem)) itemSelect.value = currentItem;
       if (el("pbEffectiveDate") && !el("pbEffectiveDate").value) el("pbEffectiveDate").value = currentResultDate();
       const selectedPb = getPb(studentSelect.value, itemSelect.value);
-      if (el("pbValueInput") && selectedPb && !el("pbValueInput").value) el("pbValueInput").placeholder = selectedPb.pb;
+      const candidate = selectedPbCandidate();
+      if (el("pbValueInput") && !el("pbValueInput").value) el("pbValueInput").placeholder = candidate && !candidate.ignored ? `候選最佳 ${candidate.label}` : (selectedPb?.pb ? `目前PB ${selectedPb.pb}` : "例：0:58.83");
       if (status) status.textContent = pbState.studentCount
         ? `已載入 ${pbState.studentCount} 位學生 PB。手動修改會立即更新 PB資料，並寫入 PB更新紀錄。`
         : "PB 尚未載入。";
-      renderSimpleTable("pbDataTable", pbState.headers, pbState.rows);
+      renderPbCandidateBox();
+      renderSimpleTable("pbDataTable", ["姓名", "項目", "正式PB"], pbQueryRows(studentSelect.value, itemSelect.value));
       const historyRows = pbState.historyRows.slice().reverse();
       renderSimpleTable("pbHistoryTable", pbState.historyHeaders, historyRows, 30);
     }
@@ -3213,28 +3335,65 @@
       const option = studentSelect.selectedOptions?.[0];
       const studentId = option?.dataset?.studentId || "";
       const effectiveDate = el("pbEffectiveDate")?.value || currentResultDate();
+      const candidate = selectedPbCandidate();
+      const isCandidateSave = candidate && !candidate.ignored && Math.abs(Number(candidate.seconds) - parsed) < 0.01;
       setStatus("正在儲存 PB...", "good");
       try {
         const result = await sheetAction({
           action: "savePbRecord",
-          source: "manual",
-          applyToPbTable: true,
+          source: isCandidateSave ? "daily_best" : "manual",
+          applyToPbTable: !isCandidateSave,
           name,
           studentId,
           item,
           newPbSeconds: parsed,
           newPbLabel: fmt(parsed),
           effectiveDate,
-          note: "教練手動修改",
+          recordId: isCandidateSave ? candidate.recordId : "",
+          note: isCandidateSave ? `套用候選最佳：${candidate.date || ""} ${candidate.sourceLabel || ""} ${candidate.bestTrip || ""}` : "教練手動修改",
         });
         if (!result?.ok || !applyPbData(result.data, true)) throw new Error("save-pb-failed");
+        if (isCandidateSave) {
+          candidate.ignored = true;
+          candidate.appliedAt = new Date().toISOString();
+          savePbCandidatesLocal();
+        }
         if (pbInput) pbInput.value = "";
         renderPbManager();
         redrawPbDependentViews();
-        setStatus(`已更新 PB：${name} ${item} ${fmt(parsed)}。`, "good");
+        setStatus(isCandidateSave ? `已寫入候選 PB 更新紀錄：${name} ${item} ${fmt(parsed)}。` : `已更新 PB：${name} ${item} ${fmt(parsed)}。`, "good");
       } catch {
         setStatus("PB 儲存失敗：請確認 Apps Script 已部署最新版。", "bad");
       }
+    }
+
+    function applySelectedPbCandidate() {
+      const candidate = selectedPbCandidate();
+      if (!candidate || candidate.ignored) {
+        setStatus("目前選取的學生與項目沒有 PB 候選。", "bad");
+        return;
+      }
+      if (el("pbValueInput")) el("pbValueInput").value = candidate.label;
+      if (el("pbEffectiveDate")) {
+        const sourceDate = String(candidate.date || currentResultDate()).replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
+        const date = new Date(`${sourceDate}T00:00:00`);
+        date.setDate(date.getDate() + 1);
+        el("pbEffectiveDate").value = date.toISOString().slice(0, 10);
+      }
+      setStatus(`已套用候選最佳到輸入框：${candidate.name} ${candidate.item} ${candidate.label}`, "good");
+    }
+
+    function ignoreSelectedPbCandidate() {
+      const candidate = selectedPbCandidate();
+      if (!candidate) {
+        setStatus("目前選取的學生與項目沒有 PB 候選可忽略。", "bad");
+        return;
+      }
+      candidate.ignored = true;
+      candidate.ignoredAt = new Date().toISOString();
+      savePbCandidatesLocal();
+      renderPbManager();
+      setStatus(`已忽略候選：${candidate.name} ${candidate.item} ${candidate.label}`, "good");
     }
 
     function intensityClass(percent) {
@@ -3331,11 +3490,13 @@
       try {
         const result = await sheetAction({ action: "getPbData" });
         if (!result?.ok || !applyPbData(result.data, true)) throw new Error("invalid-pb-data");
+        refreshPbCandidates();
         renderPbManager();
         redrawPbDependentViews();
         setStatus(`已載入 PB：${pbState.studentCount} 位學生。`, "good");
       } catch {
         if (usedLocal) {
+          refreshPbCandidates();
           renderPbManager();
           redrawPbDependentViews();
           setStatus(`已使用這台裝置的 PB 快取：${pbState.studentCount} 位學生。`, "good");
@@ -4749,6 +4910,8 @@
       el("rawTable").innerHTML = `
         <thead><tr><th>#</th><th>姓名</th><th>動作</th><th>時間</th><th>第幾次</th><th>原始文字</th></tr></thead>
         <tbody>${rawRows || issueRows ? rawRows + issueRows : `<tr><td colspan="6">尚無紀錄。</td></tr>`}</tbody>`;
+      refreshPbCandidates();
+      renderPbManager();
     }
 
     function renderSnapshotList(openIndex = null) {
@@ -4840,6 +5003,8 @@
       list.querySelectorAll("[data-delete-snapshot]").forEach((button) => {
         button.addEventListener("click", () => deleteSnapshot(Number(button.dataset.deleteSnapshot)));
       });
+      refreshPbCandidates();
+      renderPbManager();
     }
 
     function renderSnapshotParsePreview(snapshot, snapshotIndex = 0) {
@@ -6934,14 +7099,21 @@
     if (el("resultDate") && !el("resultDate").value) el("resultDate").value = new Date().toISOString().slice(0, 10);
     if (el("pbEffectiveDate") && !el("pbEffectiveDate").value) el("pbEffectiveDate").value = el("resultDate")?.value || new Date().toISOString().slice(0, 10);
     el("savePbBtn")?.addEventListener("click", saveManualPb);
+    el("applyPbCandidateBtn")?.addEventListener("click", applySelectedPbCandidate);
+    el("ignorePbCandidateBtn")?.addEventListener("click", ignoreSelectedPbCandidate);
     el("pbStudentSelect")?.addEventListener("change", () => {
       const selectedPb = getPb(el("pbStudentSelect")?.value, el("pbItemSelect")?.value);
-      if (el("pbValueInput")) el("pbValueInput").placeholder = selectedPb?.pb || "例：0:58.83";
+      const candidate = selectedPbCandidate();
+      if (el("pbValueInput")) el("pbValueInput").placeholder = candidate && !candidate.ignored ? `候選最佳 ${candidate.label}` : (selectedPb?.pb ? `目前PB ${selectedPb.pb}` : "例：0:58.83");
+      renderPbManager();
     });
     el("pbItemSelect")?.addEventListener("change", () => {
       const selectedPb = getPb(el("pbStudentSelect")?.value, el("pbItemSelect")?.value);
-      if (el("pbValueInput")) el("pbValueInput").placeholder = selectedPb?.pb || "例：0:58.83";
+      const candidate = selectedPbCandidate();
+      if (el("pbValueInput")) el("pbValueInput").placeholder = candidate && !candidate.ignored ? `候選最佳 ${candidate.label}` : (selectedPb?.pb ? `目前PB ${selectedPb.pb}` : "例：0:58.83");
+      renderPbManager();
     });
+    loadPbCandidatesLocal();
     render();
     renderSnapshotList();
     renderMixRows();
