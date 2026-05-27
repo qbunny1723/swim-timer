@@ -2737,15 +2737,42 @@
       return grouped(snapshot.entries).map((item) => item.name);
     }
 
+    function snapshotCourseLabel(snapshot) {
+      const title = String(snapshot?.title || "").trim();
+      const titleMatch = title.match(/([A-Z])課表/i);
+      if (titleMatch) return `${titleMatch[1].toUpperCase()}課表`;
+      const rows = Array.isArray(snapshot?.summaryTableRows) ? snapshot.summaryTableRows : [];
+      const headers = rows[0] || [];
+      const courseIndex = Array.isArray(headers) ? headers.indexOf("課表") : -1;
+      if (courseIndex >= 0) {
+        const labels = Array.from(new Set(rows.slice(1)
+          .map((row) => String(row?.[courseIndex] || "").trim().toUpperCase())
+          .filter(Boolean)));
+        if (labels.length === 1) return `${labels[0]}課表`;
+      }
+      const settings = normalizeCourseSettings(snapshot?.courseSettings || {});
+      const plan = activeCoursePlanRowsFromSettings(settings);
+      if (plan.length === 1 && plan[0]?.groupLabel) return `${plan[0].groupLabel}課表`;
+      return "";
+    }
+
+    function normalizedSnapshotTitle(snapshot, index = 0) {
+      const settings = normalizeCourseSettings(snapshot?.courseSettings || {});
+      const sessionGroup = settings.sessionGroup || snapshot?.sessionGroup || String(index + 1);
+      const courseLabel = snapshotCourseLabel(snapshot);
+      return [`第${sessionGroup}組`, courseLabel].filter(Boolean).join(" ");
+    }
+
     function snapshotLabel(snapshot, index) {
       const count = snapshotNames(snapshot).length;
-      return `${snapshot.title || `第${index + 1}組`} · ${count}人`;
+      return `${normalizedSnapshotTitle(snapshot, index)} · ${count}人`;
     }
 
     function cloudBackupLabel(item, index) {
-      const title = item?.title || `第${index + 1}組`;
+      const title = String(item?.title || `第${index + 1}組`).trim();
+      const normalizedTitle = /[A-Z]課表/i.test(title) ? title : `${title} A課表`;
       const count = Number(item?.studentCount || 0);
-      return count ? `${title} · ${count}人` : title;
+      return count ? `${normalizedTitle} · ${count}人` : normalizedTitle;
     }
 
     function compactDisplayDate(value) {
