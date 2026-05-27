@@ -3547,6 +3547,64 @@
       return item?.timeOverride || parseTime(item?.timeRaw);
     }
 
+    function eventDistanceMeters(itemName) {
+      const settings = currentCourseSettings();
+      const meta = summaryMetaForContext(itemName, [], settings, state.summaryMetaOverrides || {});
+      const text = String(meta.item || activeCoursePlanRows()[0]?.item || "").trim();
+      const match = text.match(/(\d{2,4})/);
+      return match ? Number(match[1]) : 0;
+    }
+
+    function plausibleResultRange(distance) {
+      if (distance <= 0) return { min: 8, max: 20 * 60 };
+      if (distance <= 25) return { min: 8, max: 2 * 60 };
+      if (distance <= 50) return { min: 12, max: 3 * 60 };
+      if (distance <= 100) return { min: 35, max: 6 * 60 };
+      if (distance <= 200) return { min: 80, max: 12 * 60 };
+      return { min: 2 * 60, max: 25 * 60 };
+    }
+
+    function chooseContextualBackTime(item, startTime) {
+      const choices = Array.isArray(item.timeChoices) && item.timeChoices.length
+        ? item.timeChoices
+        : [{ label: parseTime(item.timeRaw)?.label || item.timeRaw, time: parseTime(item.timeRaw), mode: "base" }];
+      if (!startTime || !choices.length) return null;
+      const range = plausibleResultRange(eventDistanceMeters(item.name));
+      const scored = choices
+        .map((choice) => {
+          if (!choice.time) return null;
+          const delta = choice.time.total - startTime.total - parseDeduct(item.timeRaw);
+          if (!Number.isFinite(delta) || delta <= 0) return null;
+          const inRange = delta >= range.min && delta <= range.max;
+          const target = Math.min(Math.max((range.min + range.max) / 3, range.min), range.max);
+          const score = (inRange ? 100000 : 0) - Math.abs(delta - target);
+          return { choice, delta, inRange, score };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.score - a.score);
+      if (!scored.length) return null;
+      if (scored[0].inRange) return scored[0].choice;
+      const positive = scored.filter((item) => item.delta > 0);
+      return positive.length === 1 ? positive[0].choice : null;
+    }
+
+    function applyContextualTimeChoices(items) {
+      const startsByName = new Map();
+      items.forEach((item) => {
+        if (!item.timeRaw || item.timeRaw === "-") return;
+        if (item.action === "出發") {
+          const parsed = parseTime(item.timeRaw);
+          if (parsed) startsByName.set(item.name, parsed);
+          return;
+        }
+        if (item.action !== "回來") return;
+        const chosen = chooseContextualBackTime(item, startsByName.get(item.name));
+        if (!chosen?.time) return;
+        item.timeOverride = chosen.time;
+        item.timeLabel = chosen.label || chosen.time.label;
+      });
+    }
+
     function hasUnresolvedTimeChoice(item) {
       return Array.isArray(item?.timeChoices) && item.timeChoices.length > 1 && !item.timeOverride;
     }
@@ -3755,6 +3813,7 @@
         const raw = originalSegments.map((segment) => segment.raw).join("，");
         issues.push({ raw, sourceText: raw, issue: "無法拆成「姓名 + 時間 + 出發/回來」" });
       }
+      applyContextualTimeChoices(items);
       return { items, issues };
     }
 
