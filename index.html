@@ -6410,7 +6410,11 @@
               ctx.strokeRect(x, y, width, height);
               ctx.fillStyle = cell.color || options.color || "#243746";
               ctx.font = `${cell.bold || options.bold ? "700" : "500"} ${cell.size || options.size || 10}px Microsoft JhengHei, Arial`;
-              drawPdfCellText(ctx, cell.text ?? cell, x + 4, y + Math.min(16, height - 7), width - 8);
+              if (Array.isArray(cell.parts)) {
+                drawPdfCellParts(ctx, cell.parts, x + 4, y + Math.min(16, height - 7), width - 8);
+              } else {
+                drawPdfCellText(ctx, cell.text ?? cell, x + 4, y + Math.min(16, height - 7), width - 8);
+              }
               x += width;
             });
             y += height;
@@ -6439,9 +6443,7 @@
               ...["", "", "", "", "休息/含休差", ""].map((text) => ({ text, bold: !!text, color: "#6B7280" })),
               ...Array.from({ length: section.maxTrips }, (_, index) => {
                 const text = swimmer.rests[index] || "";
-                const color = text.includes("+") ? "#C3445C" : text.includes("-") ? "#087856" : "#0A6F68";
-                const bg = text.includes("+") ? "#FFE2E8" : text ? "#D6F5EF" : "#F8FBFC";
-                return { text, color, bg, bold: !!text };
+                return { parts: pdfRestParts(text), bg: groupColors.subtle, bold: !!text };
               }),
               ...["", "", "", "", ""].map((text) => ({ text })),
             ], { bg: groupColors.subtle, color: "#6B7280", size: 9, height: rowHeight });
@@ -6487,6 +6489,24 @@
       return colors[String(group || "").trim().toUpperCase()] || { main: "#FFFFFF", subtle: "#F8FBFC" };
     }
 
+    function pdfRestParts(text) {
+      const value = String(text || "").trim();
+      if (!value) return [];
+      const parts = [];
+      const rest = value.match(/休-?\d+秒/);
+      const diff = value.match(/([+-]\d+秒)/);
+      if (rest) parts.push({ text: rest[0], color: "#6B7280", bold: true });
+      if (diff) {
+        const diffValue = Number(diff[1].replace("秒", ""));
+        parts.push({
+          text: diff[1],
+          color: diffValue > 0 ? "#C3445C" : diffValue < 0 ? "#087856" : "#6B7280",
+          bold: true,
+        });
+      }
+      return parts.length ? parts : [{ text: value, color: "#6B7280", bold: true }];
+    }
+
     function drawPdfCellText(ctx, text, x, y, maxWidth) {
       if (!text) return;
       let clipped = text;
@@ -6495,6 +6515,26 @@
       }
       if (clipped !== text && clipped.length > 1) clipped = clipped.slice(0, -1) + "…";
       ctx.fillText(clipped, x, y);
+    }
+
+    function drawPdfCellParts(ctx, parts, x, y, maxWidth) {
+      let cursor = x;
+      let remaining = maxWidth;
+      parts.forEach((part, index) => {
+        if (!part?.text || remaining <= 0) return;
+        ctx.fillStyle = part.color || "#6B7280";
+        ctx.font = `${part.bold ? "700" : "500"} ${part.size || 9}px Microsoft JhengHei, Arial`;
+        const text = index > 0 ? ` ${part.text}` : part.text;
+        let clipped = text;
+        while (clipped.length && ctx.measureText(clipped).width > remaining) {
+          clipped = clipped.slice(0, -1);
+        }
+        if (!clipped) return;
+        ctx.fillText(clipped, cursor, y);
+        const width = ctx.measureText(clipped).width;
+        cursor += width;
+        remaining -= width;
+      });
     }
 
     function buildImagePdf(pages) {
